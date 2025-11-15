@@ -1,0 +1,7 @@
+{
+    "riscv64":{
+        "KERNEL_ENTRY_ADDR": "0x8020_0000",
+        "KERNEL_PAGE_ADDR": "0x8000_0000",
+        "KERNEL_SPACE_OFFSET": "0xffff_ffc0_0000_0000"
+    }
+}
