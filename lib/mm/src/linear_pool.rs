@@ -1,21 +1,39 @@
-//! This module provides a linear memory pool, which functions like a stack, and is only used for allocate
-//! permanent memory blocks in specific size
+//! This module provides a simple linear memory pool.
+//!
+//! # Overview
+//!
+//! `LinearPool` is a minimal bump allocator used to allocate permanent,
+//! non-freeable memory regions during early boot or low-level initialization.
+//!
+//! It behaves like a stack: memory is always allocated from the top, and the
+//! pool never supports freeing or rewinding.  
 
-/// A linear pool struct
+/// A linear, bump-pointer–style memory pool.
 pub struct LinearPool{
-    /// the starting point of the pool
+    /// The starting address of the memory pool.
     pub start: *mut u8,
-    /// the pool top
+    /// The current top address of the pool.  
+    /// New allocations are taken from this pointer.
     pub top: *mut u8
 }
 
 impl LinearPool{
-    /// Create a linear pool from a specific address
+    /// Create a [LinearPool] that begins at the given base address.
+    ///
+    /// The pool initially has both `start` and `top` set to `start`.
     pub fn from(start: *mut u8) -> LinearPool{
         LinearPool { start, top: start }
     }
 
-    /// Take a memory area of a specific size and return the pointer
+    
+    /// Allocate a memory region of `size` bytes from the pool and return its base pointer.
+    ///
+    /// This function simply moves the bump pointer forward to allocate a memory space and returns a pointer to the allocated space
+    /// The caller is responsible for ensuring:
+    /// * The pool has enough space.
+    /// * Alignment requirements are satisfied, if needed.
+    ///
+    /// No memory is ever freed.
     pub fn take(&mut self, size: usize) -> *mut u8{
         let res = self.top;
         unsafe{

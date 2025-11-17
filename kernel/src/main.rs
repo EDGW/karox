@@ -37,11 +37,7 @@ fn load_fdt(fdt: FdtPtr, pool: &mut LinearPool){
     });
 
     // Load Device Tree
-    let res = fdt.load(pool);
-    if let Err(info) = res{
-        kprintln!("Unable to load the fdt: {}", info);
-    }
-    let root = res.unwrap();
+    let root = fdt.load(pool).unwrap();
     enumerate_subnodes(root, |name, node|{
         kprintln!("Node {} with {} subnodes and {} properties.",name, node.children_cnt, node.props_cnt);
     });
