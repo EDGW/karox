@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 config = { path = "../lib/config/"}
+fdt_resolver = { path = "../lib/fdt_resolver/"}
+mm = { path = "../lib/mm/"}
 bitflags = {workspace = true}
 
 [target.riscv64gc-unknown-none-elf.dependencies]

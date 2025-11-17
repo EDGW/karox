@@ -107,7 +107,8 @@ use bitflags::bitflags;
     }
 
     /// A page table structure that takes a full page(4KiBs).
-    pub type PageTable = [PageTableEntry; PTABLE_LENGTH];
+    #[repr(align(4096))]
+    pub struct PageTable(pub [PageTableEntry; PTABLE_LENGTH]);
 
 // endregion
 

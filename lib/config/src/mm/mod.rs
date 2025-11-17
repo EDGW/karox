@@ -1,6 +1,7 @@
 //! Some memory-management-related configurations,
 //! including symbols defined in linker.ld and some arch-specific configurations
 
+pub mod endian;
 
 /// Include a specific symbol in linker.js
 #[macro_export]
