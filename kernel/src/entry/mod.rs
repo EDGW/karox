@@ -29,7 +29,16 @@ pub fn kwrite_fmt(fmt: Arguments){
     SerialOut.write_fmt(fmt).unwrap();
 }
 
-/// Print formmated string to the serial port
+/// Print a formmated string to the serial port
+/// 
+/// Its only for kernel use
+#[macro_export]
+macro_rules! kprint {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        $crate::entry::kwrite_fmt(format_args!($fmt $(, $($arg)+)?));
+    }
+}
+/// Print a formmated string to the serial port and move to a new line
 /// 
 /// Its only for kernel use
 #[macro_export]

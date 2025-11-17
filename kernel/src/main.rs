@@ -7,7 +7,7 @@
 use core::{panic::PanicInfo};
 
 use config::mm::_ekernel;
-use fdt_resolver::{FdtPtr, structure::{enumerate_subnodes}};
+use fdt_resolver::{FdtPtr};
 use mm::linear_pool::LinearPool;
 
 #[macro_use]
@@ -37,11 +37,8 @@ fn load_fdt(fdt: FdtPtr, pool: &mut LinearPool){
     });
 
     // Load Device Tree
-    let root = fdt.load(pool).unwrap();
-    enumerate_subnodes(root, |name, node|{
-        kprintln!("Node {} with {} subnodes and {} properties.",name, node.children_cnt, node.props_cnt);
-    });
-    kprintln!("OK");
+    let _root = fdt.load(pool).unwrap();
+    kprintln!("Device Tree Loaded.");
 }
 
 /// The panic handler

@@ -1,47 +1,38 @@
 //! Module: FDT structure-block parser
 //!
 //! This module provides low-level helpers to parse the **structure block** of a Flattened Device Tree (FDT).
-//! It reads big-endian 32-bit tokens and builds a flat `NodeInfo` pool that
-//! describes node names, property pointers/counts, child links and sibling links.
+//! It reads big-endian 32-bit tokens and builds a flat [NodeInfo] pool that describes node names,
+//! property pointers/counts, child links and sibling links.
 //!
 //! ## Responsibilities
-//! - Walk the structure block tokens (`FDT_BEGIN_NODE`, `FDT_PROP`, `FDT_END_NODE`, etc.).  
+//! - Walk the structure block tokens.
 //! - Extract node names (zero-terminated strings) and property payload pointers (raw bytes).  
 //! - Populate `NodeInfo` entries into a caller-provided pool and link children/siblings.  
-//! - Provide a tiny visitor helper `enumerate_subnodes` for iteration.
+//! - Provide small helpers to iterate child nodes and properties ([enumerate_subnodes], [enumerate_props]).
 //!
 //! ## Safety & assumptions
-//! - The parser operates entirely on raw pointers into the FDT memory — **all functions are unsafe by nature**.
-//!   Callers must ensure the `ptr` and `boundary` arguments actually point into a valid, readable FDT memory region.
-//! - All tokens and lengths are expected to be **big-endian 32-bit** values and 4-byte aligned; the code
-//!   relies on that alignment and on well-formed token/length fields.
-//! - The module **does not allocate**; the caller must provide a `node_pool` large enough to hold all `NodeInfo` entries.
-//! - Out-of-format or out-of-bounds data results in an `Err(&'static str)` from `read_node` — the original `ptr` is restored on error.
+//! - The parser operates on raw pointers into the FDT memory — callers must ensure the `ptr`, `boundary`
+//!   and any returned pointers remain valid for the required lifetime.
+//! - All tokens and lengths are big-endian 32-bit values and 4-byte aligned; the code relies on that alignment.
+//! - The module does not allocate; the caller must provide a `node_pool` large enough to hold all [NodeInfo] entries.
+//! - Parsing functions return `Err(&'static str)` on malformed input and attempt to restore the cursor to its
+//!   original value on error where applicable.
 //!
 //! ## Main API
-//! - `read_node(ptr, boundary, node_pool) -> Result<*mut NodeInfo, &'static str>`  
-//!   Parse a node (and its subtree) starting at `*ptr`, populate `node_pool` with a `NodeInfo` and its descendants,
-//!   and return the next free entry pointer on success. `boundary` is provided so callers may check bounds if desired.
-//! - `enumerate_subnodes(node, handler)`  
+//! - [read_node]
+//!   Parse a node (and its subtree) starting at `*ptr`, populate `node_pool` with a [NodeInfo] and its descendants,
+//!   and return the next free entry pointer on success. `fdt` is the [FdtPtr] for pointer helpers (e.g. string table).
+//! - [enumerate_subnodes]
 //!   Call `handler(name, node)` for each direct child of `node` in order.
-//!
-//! ## Notes on usage
-//! - Typical flow:
-//!   1. Map or obtain a pointer to the FDT structure block (big-endian words).  
-//!   2. Provide a `node_pool` buffer (array of `NodeInfo`) large enough for all nodes.  
-//!   3. Call `read_node` with a pointer to the first token; on success, the pool contains the parsed tree.
-//!   4. Use `enumerate_subnodes` to traverse child nodes or inspect `NodeInfo` fields directly.
-//! - The module stores pointers into the original FDT memory for names and property data. The backing FDT memory
-//!   must remain valid for the lifetime of the `NodeInfo` data.
-//!
-//! ## Limitations
-//! - The parser is low-level and assumes a well-formed FDT. It performs limited validation and does not guard
-//!   against every possible malformed input; callers in hostile environments must validate bounds/lengths before calling.
-//!
+//! - [enumerate_props]
+//!   Iterate properties of `node`, calling `handler` with a [PropertyInfo] for each property.
+
 
 use core::{slice::{self}, str};
 
 use config::mm::endian::{BigEndian32};
+
+use crate::FdtPtr;
 
 
 /// *The structure block is composed of a sequence of pieces, each beginning with a token,*
@@ -49,7 +40,7 @@ use config::mm::endian::{BigEndian32};
 /// *the format of which is determined by the token value. All tokens shall be aligned on a 32-bit boundary,*
 /// *which may require padding bytes (with a value of 0x0) to be inserted after the previous token’s data.*
 /// 
-/// This enum defines 5 basic token types
+/// This enum defines the basic token types used in the structure block.
 #[repr(u32)]
 pub enum FdtNodeType{
     /// Marks the start of a node block. Followed by a NUL-terminated node name string.
@@ -64,20 +55,38 @@ pub enum FdtNodeType{
     FdtEnd      =   0x9
 }
 
-/// This struct represents a node in the momory
+/// Represents a parsed node stored in the provided pool.
+///
+/// [NodeInfo] contains pointers into the original FDT memory for names and property data,
+/// plus links to children and siblings stored as [NodeInfo] entries in the pool.
+///
+/// The added `fdt` field gives access to FDT-level helpers (for example string-table offsets).
 pub struct NodeInfo{
+    /// [FdtPtr] handle for the source DTB this node references.
+    pub fdt: FdtPtr,
     /// Node name string slice pointing into original FDT memory (NUL-terminated in source).
     pub name: &'static str,
-    /// Pointer to the first property token for this node (points to the `BigEndian32` token stream).
+    /// Pointer to the first property token for this node
     pub first_prop_ptr: *const BigEndian32,
     /// Number of properties for this node.
     pub props_cnt: usize,
-    /// Pointer to the first child node's `NodeInfo` entry in the pool.
+    /// Pointer to the first child node's[`NodeInfo] entry in the pool.
     pub first_child_ptr: *const NodeInfo,
     /// Number of direct children.
     pub children_cnt: usize,
-    /// Pointer to the next sibling node's `NodeInfo` entry in the pool (or undefined if none).
+    /// Pointer to the next sibling node's [NodeInfo] entry in the pool (or undefined if none).
     pub next_node: *const NodeInfo,
+}
+
+/// A lightweight description of a property (name and value slices).
+///
+/// Both [PropertyInfo::name] and [PropertyInfo::value] borrow from the original DTB memory; the backing DTB must remain valid
+/// for the lifetime of the [PropertyInfo] usage.
+pub struct PropertyInfo{
+    /// Property name (points into the DTB string table).
+    pub name: &'static str,
+    /// Property value as a byte slice.
+    pub value: &'static [u8]
 }
 
 /// Read the 32-bit big-endian value at `**ptr` without advancing the cursor.
@@ -132,6 +141,21 @@ fn skip_white(ptr: *mut *const BigEndian32){
     }
 }
 
+/// Read a byte slice starting at the current byte position of `*ptr` in specific size.
+///
+/// Returns a `&'static str` that borrows from the original FDT memory and advances `*ptr` to the
+/// next 4-byte aligned word after the termination.
+fn read_bytes_by_length(ptr: *mut *const BigEndian32, len: usize) -> &'static [u8]{
+    unsafe{
+        let mut ptr1 = *ptr as *const u8;
+        ptr1 = ptr1.add(len);
+        align4(&mut ptr1);
+        let res = slice::from_raw_parts(*ptr as *const u8,len);
+        *ptr = ptr1 as *const BigEndian32;
+        res
+    }
+}
+
 /// Read a NUL-terminated string starting at the current byte position of `*ptr`.
 ///
 /// Returns a `&'static str` that borrows from the original FDT memory and advances `*ptr` to the
@@ -168,7 +192,7 @@ fn skip_props(ptr: *mut *const BigEndian32)->usize{
 ///
 /// `handler` receives the child's `name` and a reference to the child's `NodeInfo`.
 /// This is a safe wrapper around raw pointer traversal; the call itself uses `unsafe` internally.
-pub fn enumerate_subnodes(node: &NodeInfo, handler: fn(name: &str, node: &NodeInfo)){
+pub fn enumerate_subnodes<C: Fn(&str, &NodeInfo)>(node: &NodeInfo, handler: C ){
     let mut ptr = node.first_child_ptr;
     for _ in 0..node.children_cnt {
         unsafe{
@@ -176,6 +200,34 @@ pub fn enumerate_subnodes(node: &NodeInfo, handler: fn(name: &str, node: &NodeIn
             ptr = (*ptr).next_node as *const NodeInfo;
         }
     }
+}
+
+/// Enumerate properties of `node`, calling `handler` with each [PropertyInfo].
+///
+/// - On success returns `Ok(())`.
+/// - Returns `Err(&str)` if the structure is malformed while iterating properties.
+///
+/// This function uses `node.fdt` to obtain the string table start pointer (via [FdtPtr::get_str_table_start]).
+/// Each property yields a [PropertyInfo] borrowing the DTB memory.
+pub fn enumerate_props<C: Fn(&PropertyInfo)>(node: &NodeInfo, handler: C) -> Result<(),&str>{
+    let mut ptr = node.first_prop_ptr;
+    let st_ptr = node.fdt.get_str_table_start() as *const u8;
+    for _ in 0..node.props_cnt {
+        unsafe{
+            skip_white(&mut ptr);
+            if read(&mut ptr) != FdtNodeType::FdtProp as u32{
+                return Err("Bad node format: unknown node type");
+            }
+            let len = read(&mut ptr) as usize;
+            let nameoff = read(&mut ptr) as usize;
+            let mut ptr_str = st_ptr.add(nameoff) as *const BigEndian32;
+            let name = read_str(&mut ptr_str);
+            let value = read_bytes_by_length(&mut ptr, len);
+            let p:PropertyInfo = PropertyInfo { name, value };
+            handler(&p);
+        }
+    }
+    Ok(())
 }
 
 /// Parse a node and its subtree from the FDT structure block into `node_pool`.
@@ -194,7 +246,7 @@ pub fn enumerate_subnodes(node: &NodeInfo, handler: fn(name: &str, node: &NodeIn
 /// - The function dereferences raw pointers and assumes the FDT memory and `node_pool` are valid and writable.
 /// - Caller must ensure `node_pool` has enough capacity for this node and all descendants.
 /// - When encountered with errors, the pointer will be restored to its original state.
-pub fn read_node(ptr: *mut *const BigEndian32, boundary: *const BigEndian32, node_pool: *mut NodeInfo) -> Result<*mut NodeInfo,&'static str>{
+pub fn read_node(fdt:FdtPtr, ptr: *mut *const BigEndian32, boundary: *const BigEndian32, node_pool: *mut NodeInfo) -> Result<*mut NodeInfo,&'static str>{
     unsafe{
         let mut res = node_pool.add(1);
         let p0 = *ptr;
@@ -214,7 +266,7 @@ pub fn read_node(ptr: *mut *const BigEndian32, boundary: *const BigEndian32, nod
         skip_white(ptr);
         let mut children_cnt = 0;
         while peek(ptr) == FdtNodeType::FdtBeginNode as u32{
-            res = read_node(ptr, boundary, res)?;
+            res = read_node(fdt, ptr, boundary, res)?;
             skip_white(ptr);
             children_cnt += 1;
         }
@@ -224,6 +276,7 @@ pub fn read_node(ptr: *mut *const BigEndian32, boundary: *const BigEndian32, nod
         }
         *node_pool = NodeInfo 
         {
+            fdt,
             name: node_name, 
             first_prop_ptr: prop_ptr, 
             props_cnt: props_cnt, 

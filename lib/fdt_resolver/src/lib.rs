@@ -33,6 +33,7 @@ pub const FDT_MAGIC:u32 = 0xd00dfeed;
 /// `FdtPtr` is a small wrapper around a raw pointer to the start of a device tree blob (DTB).
 /// It provides convenience accessors to header fields, offsets and common operations such as
 /// enumerating reserved-memory entries and loading the structure block into a `LinearPool`.
+#[derive(Clone, Copy)]
 pub struct FdtPtr{
     /// Pointer to the start of the device tree blob in memory.
     pub dtb: *mut u8,
@@ -127,6 +128,13 @@ impl FdtPtr{
         }
     }
 
+    /// Get a pointer to the start of the string table.
+    pub fn get_str_table_start(&self) -> *const BigEndian32{
+        unsafe{
+            self.dtb.add((*(self.get_header())).dt_strings_offset.value() as usize) as *const BigEndian32
+        }
+    }
+
     /// Parse the structure block into the provided [LinearPool] and return a reference to the root [NodeInfo].
     ///
     /// - `node_pool`: mutable reference to a [LinearPool] whose storage will be used to store [NodeInfo] entries.
@@ -142,7 +150,7 @@ impl FdtPtr{
     pub fn load(&self, node_pool: &mut LinearPool) -> Result<&NodeInfo,&str>{
         let mut ptr = self.get_struct_start();
         let st = node_pool.start as *mut NodeInfo;
-        let end = read_node(&mut ptr, self.end(), st)?;
+        let end = read_node(self.clone(), &mut ptr, self.end(), st)?;
         let size = end as usize - node_pool.start as usize;
         node_pool.take(size);
         unsafe{
