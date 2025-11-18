@@ -7,7 +7,7 @@
 use core::{panic::PanicInfo};
 
 use config::mm::_ekernel;
-use fdt_resolver::{FdtPtr};
+use fdt_resolver::{FdtPtr, structure::{enumerate_subnodes, memory::{get_memory_range}}};
 use mm::linear_pool::LinearPool;
 
 #[macro_use]
@@ -31,13 +31,27 @@ fn load_fdt(fdt: FdtPtr, pool: &mut LinearPool){
         panic!("Unable to read the device table: {}", str);
     }
 
-    // Read Reserved Memory
-    fdt.enumerate_rsvmem(|block|{
-        kprintln!("Reserved Memory [{:#x} - {:#x}]",block.addr.value(),block.addr.value()+block.length.value());
-    });
-
     // Load Device Tree
-    let _root = fdt.load(pool).unwrap();
+    let root = fdt.load(pool).unwrap();
+    enumerate_subnodes(root, |fullname, subnode|{
+        let name = subnode.get_basic_name();
+        match name {
+            "memory" => {
+                unsafe{
+                    kprintln!("basic [{}]@{} dtype [{}]@{}",
+                    name,
+                    name.len()
+                    ,subnode.get_prop("device_type").unwrap().value_as_str()
+                    ,subnode.get_prop("device_type").unwrap().value_as_str().len());
+                }
+                let reg = get_memory_range(subnode).unwrap();
+                kprintln!("Memory {:#x} - {:#x}",reg.start, reg.end);
+            },
+            _ => {
+                kprintln!("Skipped node {}",fullname);
+            }
+        }
+    });
     kprintln!("Device Tree Loaded.");
 }
 

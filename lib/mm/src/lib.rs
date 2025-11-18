@@ -4,3 +4,8 @@
 #![deny(warnings)]
 #![deny(missing_docs)]
 pub mod linear_pool;
+
+/// Initialize memory management functions
+pub fn init(){
+
+}

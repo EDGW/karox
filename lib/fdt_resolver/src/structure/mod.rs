@@ -34,6 +34,8 @@ use config::mm::endian::{BigEndian32};
 
 use crate::FdtPtr;
 
+pub mod memory;
+
 
 /// *The structure block is composed of a sequence of pieces, each beginning with a token,*
 /// *that is, a big-endian 32-bit integer. Some tokens are followed by extra data,*
@@ -78,15 +80,48 @@ pub struct NodeInfo{
     pub next_node: *const NodeInfo,
 }
 
+impl NodeInfo{
+    /// Get the basic name of the node name
+    /// 
+    /// Valid node name formats:
+    ///  - `basic name`
+    ///  - `basic name`@`starting point`
+    pub fn get_basic_name(&self) -> &'static str{
+        if self.name.contains('@'){
+            self.name.split_once('@').unwrap().0
+        }
+        else{
+            self.name
+        }
+    }
+
+    /// Get a property with the speficied name, or return an error if not found or encountered with malformed nodes
+    pub fn get_prop(&self, name: &str) -> Result<PropertyInfo,&'static str>{
+        get_prop(self, name)
+    }
+}
+
 /// A lightweight description of a property (name and value slices).
 ///
 /// Both [PropertyInfo::name] and [PropertyInfo::value] borrow from the original DTB memory; the backing DTB must remain valid
 /// for the lifetime of the [PropertyInfo] usage.
+#[derive(Clone, Copy)]
 pub struct PropertyInfo{
     /// Property name (points into the DTB string table).
     pub name: &'static str,
     /// Property value as a byte slice.
     pub value: &'static [u8]
+}
+
+impl PropertyInfo{
+    /// Convert the value to a string
+    /// 
+    /// **This method does not guarantee that the returned string is valid**
+    pub unsafe fn value_as_str(&self) -> &'static str{
+        unsafe{
+            str::from_utf8_unchecked(&self.value[0..self.value.len()-1]) // ignoring terminating charater
+        }
+    }
 }
 
 /// Read the 32-bit big-endian value at `**ptr` without advancing the cursor.
@@ -192,7 +227,7 @@ fn skip_props(ptr: *mut *const BigEndian32)->usize{
 ///
 /// `handler` receives the child's `name` and a reference to the child's `NodeInfo`.
 /// This is a safe wrapper around raw pointer traversal; the call itself uses `unsafe` internally.
-pub fn enumerate_subnodes<C: Fn(&str, &NodeInfo)>(node: &NodeInfo, handler: C ){
+pub fn enumerate_subnodes<C: FnMut(&str, &NodeInfo)>(node: &NodeInfo, mut handler: C ){
     let mut ptr = node.first_child_ptr;
     for _ in 0..node.children_cnt {
         unsafe{
@@ -203,13 +238,15 @@ pub fn enumerate_subnodes<C: Fn(&str, &NodeInfo)>(node: &NodeInfo, handler: C ){
 }
 
 /// Enumerate properties of `node`, calling `handler` with each [PropertyInfo].
+/// 
+/// The value returned by `handler` determines whether the iteration should continue.
 ///
 /// - On success returns `Ok(())`.
 /// - Returns `Err(&str)` if the structure is malformed while iterating properties.
 ///
 /// This function uses `node.fdt` to obtain the string table start pointer (via [FdtPtr::get_str_table_start]).
 /// Each property yields a [PropertyInfo] borrowing the DTB memory.
-pub fn enumerate_props<C: Fn(&PropertyInfo)>(node: &NodeInfo, handler: C) -> Result<(),&str>{
+pub fn enumerate_props<C: FnMut(&PropertyInfo)->bool>(node: &NodeInfo, mut handler: C) -> Result<(),&'static str>{
     let mut ptr = node.first_prop_ptr;
     let st_ptr = node.fdt.get_str_table_start() as *const u8;
     for _ in 0..node.props_cnt {
@@ -224,10 +261,32 @@ pub fn enumerate_props<C: Fn(&PropertyInfo)>(node: &NodeInfo, handler: C) -> Res
             let name = read_str(&mut ptr_str);
             let value = read_bytes_by_length(&mut ptr, len);
             let p:PropertyInfo = PropertyInfo { name, value };
-            handler(&p);
+            if !handler(&p){
+                break;
+            }
         }
     }
     Ok(())
+}
+
+/// Find a property with the given name of `node`, returning a [PropertyInfo].
+///
+/// - On success returns `Ok(())`.
+/// - Returns `Err(&str)` if the structure is malformed while iterating properties, or the property with such a name does not exist.
+///
+/// This function uses `node.fdt` to obtain the string table start pointer (via [FdtPtr::get_str_table_start]).
+pub fn get_prop(node: &NodeInfo, name:&str) -> Result<PropertyInfo,&'static str>{
+    let mut res: Option<PropertyInfo> = None;
+    enumerate_props(node, |propinfo|{
+        if propinfo.name == name{
+            res = Some(propinfo.clone());
+            false
+        }
+        else{
+            true
+        }
+    })?;
+    res.ok_or("Property Info with the given name does not exist.")
 }
 
 /// Parse a node and its subtree from the FDT structure block into `node_pool`.
