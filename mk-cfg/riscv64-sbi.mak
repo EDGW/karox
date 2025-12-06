@@ -12,7 +12,8 @@ export QEMU_ARGS	:= 	-machine $(MACHINE) \
 						-smp $(CPU_INFO) \
 						-m $(MEM_SIZE) \
 						-bios $(BIOS) \
-						-display gtk -monitor stdio
+						-display gtk -monitor stdio \
+						$(EXTRA_QEMU_ARGS)
 
 pre_run:
 pre_build:

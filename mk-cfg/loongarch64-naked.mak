@@ -13,7 +13,8 @@ export QEMU_ARGS	:= 	-machine $(MACHINE) \
 						-kernel "$(ELF_FILE)" \
 						-smp $(CPU_INFO) \
 						-m $(MEM_SIZE) \
-						-display gtk -monitor stdio
+						-display gtk -monitor stdio \
+						$(EXTRA_QEMU_ARGS)
 
 pre_run:
 

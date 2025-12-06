@@ -8,12 +8,19 @@ build:
 	make -f mk-cfg/$(BUILD_NAME).mak pre_build
 	make -C os all
 
-run: build
+run:
+	@make build
+	@make run_only
+
+run_only:
 
 	make -f mk-cfg/$(BUILD_NAME).mak pre_run
 	@echo Checking Qemu Version
-	dpkg --compare-versions $(shell $(QEMU) --version | grep version | awk '{print $$4}') gt $(MIN_QEMU_VERSION)
+	bash scripts/version_check.sh $(MIN_QEMU_VERSION) $(shell $(QEMU) --version | grep version | awk '{print $$4}')
 	@echo Launching qemu
 	$(QEMU) $(QEMU_ARGS)
 
-.PHONY: build run
+exec:
+	@echo $(CUR)/$(ELF_FILE)
+
+.PHONY: build run run_only exec
