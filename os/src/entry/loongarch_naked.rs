@@ -1,7 +1,4 @@
-use core::{
-    arch::{global_asm, naked_asm},
-    sync::atomic::{AtomicBool, Ordering},
-};
+use core::arch::{global_asm, naked_asm};
 
 use crate::{
     arch::{
@@ -13,7 +10,7 @@ use crate::{
         },
         reg::{CR_CPUID, CR_CRMD, CR_DMW0, CR_DMW1, CR_DMW2, CR_PRMD},
     },
-    devices::device_tree::FdtTree,
+    devices::device_info::FdtTree,
     entry::shared::clear_bss,
     rust_main,
 };

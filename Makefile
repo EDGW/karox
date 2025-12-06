@@ -2,6 +2,8 @@ include config.mak
 
 export CUR	:= $(shell pwd)
 
+all: $(ALL_BUILDS)
+
 build: $(DEFAULT_BUILD)
 
 run:
