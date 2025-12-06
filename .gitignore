@@ -1,3 +1,7 @@
 /target/
 /.vscode/
 /Cargo.lock
+/.cargo/
+/bin/
+/exclude/
+/runtime/

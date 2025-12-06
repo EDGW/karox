@@ -1,0 +1,329 @@
+Features supported by rustc for this target:
+    a                                - 'A' (Atomic Instructions).
+    b                                - 'B' (the collection of the Zba, Zbb, Zbs extensions).
+    c                                - 'C' (Compressed Instructions).
+    crt-static                       - Enables C Run-time Libraries to be statically linked.
+    d                                - 'D' (Double-Precision Floating-Point).
+    e                                - 'E' (Embedded Instruction Set with 16 GPRs).
+    f                                - 'F' (Single-Precision Floating-Point).
+    m                                - 'M' (Integer Multiplication and Division).
+    relax                            - Enable Linker relaxation..
+    rva23u64                         - RISC-V rva23u64 profile.
+    supm                             - 'Supm' (Indicates User-mode Pointer Masking).
+    unaligned-scalar-mem             - Has reasonably performant unaligned scalar loads and stores.
+    unaligned-vector-mem             - Has reasonably performant unaligned vector loads and stores.
+    v                                - 'V' (Vector Extension for Application Processors).
+    za128rs                          - 'Za128rs' (Reservation Set Size of at Most 128 Bytes).
+    za64rs                           - 'Za64rs' (Reservation Set Size of at Most 64 Bytes).
+    zaamo                            - 'Zaamo' (Atomic Memory Operations).
+    zabha                            - 'Zabha' (Byte and Halfword Atomic Memory Operations).
+    zacas                            - 'Zacas' (Atomic Compare-And-Swap Instructions).
+    zalrsc                           - 'Zalrsc' (Load-Reserved/Store-Conditional).
+    zama16b                          - 'Zama16b' (Atomic 16-byte misaligned loads, stores and AMOs).
+    zawrs                            - 'Zawrs' (Wait on Reservation Set).
+    zba                              - 'Zba' (Address Generation Instructions).
+    zbb                              - 'Zbb' (Basic Bit-Manipulation).
+    zbc                              - 'Zbc' (Carry-Less Multiplication).
+    zbkb                             - 'Zbkb' (Bitmanip instructions for Cryptography).
+    zbkc                             - 'Zbkc' (Carry-less multiply instructions for Cryptography).
+    zbkx                             - 'Zbkx' (Crossbar permutation instructions).
+    zbs                              - 'Zbs' (Single-Bit Instructions).
+    zca                              - 'Zca' (part of the C extension, excluding compressed floating point loads/stores).
+    zcb                              - 'Zcb' (Compressed basic bit manipulation instructions).
+    zcmop                            - 'Zcmop' (Compressed May-Be-Operations).
+    zdinx                            - 'Zdinx' (Double in Integer).
+    zfa                              - 'Zfa' (Additional Floating-Point).
+    zfbfmin                          - 'Zfbfmin' (Scalar BF16 Converts).
+    zfh                              - 'Zfh' (Half-Precision Floating-Point).
+    zfhmin                           - 'Zfhmin' (Half-Precision Floating-Point Minimal).
+    zfinx                            - 'Zfinx' (Float in Integer).
+    zhinx                            - 'Zhinx' (Half Float in Integer).
+    zhinxmin                         - 'Zhinxmin' (Half Float in Integer Minimal).
+    zic64b                           - 'Zic64b' (Cache Block Size Is 64 Bytes).
+    zicbom                           - 'Zicbom' (Cache-Block Management Instructions).
+    zicbop                           - 'Zicbop' (Cache-Block Prefetch Instructions).
+    zicboz                           - 'Zicboz' (Cache-Block Zero Instructions).
+    ziccamoa                         - 'Ziccamoa' (Main Memory Supports All Atomics in A).
+    ziccif                           - 'Ziccif' (Main Memory Supports Instruction Fetch with Atomicity Requirement).
+    zicclsm                          - 'Zicclsm' (Main Memory Supports Misaligned Loads/Stores).
+    ziccrse                          - 'Ziccrse' (Main Memory Supports Forward Progress on LR/SC Sequences).
+    zicntr                           - 'Zicntr' (Base Counters and Timers).
+    zicond                           - 'Zicond' (Integer Conditional Operations).
+    zicsr                            - 'Zicsr' (CSRs).
+    zifencei                         - 'Zifencei' (fence.i).
+    zihintntl                        - 'Zihintntl' (Non-Temporal Locality Hints).
+    zihintpause                      - 'Zihintpause' (Pause Hint).
+    zihpm                            - 'Zihpm' (Hardware Performance Counters).
+    zimop                            - 'Zimop' (May-Be-Operations).
+    zk                               - 'Zk' (Standard scalar cryptography extension).
+    zkn                              - 'Zkn' (NIST Algorithm Suite).
+    zknd                             - 'Zknd' (NIST Suite: AES Decryption).
+    zkne                             - 'Zkne' (NIST Suite: AES Encryption).
+    zknh                             - 'Zknh' (NIST Suite: Hash Function Instructions).
+    zkr                              - 'Zkr' (Entropy Source Extension).
+    zks                              - 'Zks' (ShangMi Algorithm Suite).
+    zksed                            - 'Zksed' (ShangMi Suite: SM4 Block Cipher Instructions).
+    zksh                             - 'Zksh' (ShangMi Suite: SM3 Hash Function Instructions).
+    zkt                              - 'Zkt' (Data Independent Execution Latency).
+    ztso                             - 'Ztso' (Memory Model - Total Store Order).
+    zvbb                             - 'Zvbb' (Vector basic bit-manipulation instructions).
+    zvbc                             - 'Zvbc' (Vector Carryless Multiplication).
+    zve32f                           - 'Zve32f' (Vector Extensions for Embedded Processors with maximal 32 EEW and F extension).
+    zve32x                           - 'Zve32x' (Vector Extensions for Embedded Processors with maximal 32 EEW).
+    zve64d                           - 'Zve64d' (Vector Extensions for Embedded Processors with maximal 64 EEW, F and D extension).
+    zve64f                           - 'Zve64f' (Vector Extensions for Embedded Processors with maximal 64 EEW and F extension).
+    zve64x                           - 'Zve64x' (Vector Extensions for Embedded Processors with maximal 64 EEW).
+    zvfbfmin                         - 'Zvfbfmin' (Vector BF16 Converts).
+    zvfbfwma                         - 'Zvfbfwma' (Vector BF16 widening mul-add).
+    zvfh                             - 'Zvfh' (Vector Half-Precision Floating-Point).
+    zvfhmin                          - 'Zvfhmin' (Vector Half-Precision Floating-Point Minimal).
+    zvkb                             - 'Zvkb' (Vector Bit-manipulation used in Cryptography).
+    zvkg                             - 'Zvkg' (Vector GCM instructions for Cryptography).
+    zvkn                             - 'Zvkn' (shorthand for 'Zvkned', 'Zvknhb', 'Zvkb', and 'Zvkt').
+    zvknc                            - 'Zvknc' (shorthand for 'Zvknc' and 'Zvbc').
+    zvkned                           - 'Zvkned' (Vector AES Encryption & Decryption (Single Round)).
+    zvkng                            - 'Zvkng' (shorthand for 'Zvkn' and 'Zvkg').
+    zvknha                           - 'Zvknha' (Vector SHA-2 (SHA-256 only)).
+    zvknhb                           - 'Zvknhb' (Vector SHA-2 (SHA-256 and SHA-512)).
+    zvks                             - 'Zvks' (shorthand for 'Zvksed', 'Zvksh', 'Zvkb', and 'Zvkt').
+    zvksc                            - 'Zvksc' (shorthand for 'Zvks' and 'Zvbc').
+    zvksed                           - 'Zvksed' (SM4 Block Cipher Instructions).
+    zvksg                            - 'Zvksg' (shorthand for 'Zvks' and 'Zvkg').
+    zvksh                            - 'Zvksh' (SM3 Hash Function Instructions).
+    zvkt                             - 'Zvkt' (Vector Data-Independent Execution Latency).
+    zvl1024b                         - 'Zvl1024b' (Minimum Vector Length 1024).
+    zvl128b                          - 'Zvl128b' (Minimum Vector Length 128).
+    zvl16384b                        - 'Zvl16384b' (Minimum Vector Length 16384).
+    zvl2048b                         - 'Zvl2048b' (Minimum Vector Length 2048).
+    zvl256b                          - 'Zvl256b' (Minimum Vector Length 256).
+    zvl32768b                        - 'Zvl32768b' (Minimum Vector Length 32768).
+    zvl32b                           - 'Zvl32b' (Minimum Vector Length 32).
+    zvl4096b                         - 'Zvl4096b' (Minimum Vector Length 4096).
+    zvl512b                          - 'Zvl512b' (Minimum Vector Length 512).
+    zvl64b                           - 'Zvl64b' (Minimum Vector Length 64).
+    zvl65536b                        - 'Zvl65536b' (Minimum Vector Length 65536).
+    zvl8192b                         - 'Zvl8192b' (Minimum Vector Length 8192).
+
+Code-generation features supported by LLVM for this target:
+    32bit                            - Implements RV32.
+    64bit                            - Implements RV64.
+    andes45                          - Andes 45-Series processors.
+    auipc-addi-fusion                - Enable AUIPC+ADDI macrofusion.
+    conditional-cmv-fusion           - Enable branch+c.mv fusion.
+    disable-latency-sched-heuristic  - Disable latency scheduling heuristic.
+    dlen-factor-2                    - Vector unit DLEN(data path width) is half of VLEN.
+    exact-asm                        - Enable Exact Assembly (Disables Compression and Relaxation).
+    experimental                     - Experimental intrinsics.
+    experimental-p                   - 'P' ('Base P' (Packed SIMD)).
+    experimental-rvm23u32            - RISC-V experimental-rvm23u32 profile.
+    experimental-smctr               - 'Smctr' (Control Transfer Records Machine Level).
+    experimental-ssctr               - 'Ssctr' (Control Transfer Records Supervisor Level).
+    experimental-svukte              - 'Svukte' (Address-Independent Latency of User-Mode Faults to Supervisor Addresses).
+    experimental-xqccmp              - 'Xqccmp' (Qualcomm 16-bit Push/Pop and Double Moves).
+    experimental-xqcia               - 'Xqcia' (Qualcomm uC Arithmetic Extension).
+    experimental-xqciac              - 'Xqciac' (Qualcomm uC Load-Store Address Calculation Extension).
+    experimental-xqcibi              - 'Xqcibi' (Qualcomm uC Branch Immediate Extension).
+    experimental-xqcibm              - 'Xqcibm' (Qualcomm uC Bit Manipulation Extension).
+    experimental-xqcicli             - 'Xqcicli' (Qualcomm uC Conditional Load Immediate Extension).
+    experimental-xqcicm              - 'Xqcicm' (Qualcomm uC Conditional Move Extension).
+    experimental-xqcics              - 'Xqcics' (Qualcomm uC Conditional Select Extension).
+    experimental-xqcicsr             - 'Xqcicsr' (Qualcomm uC CSR Extension).
+    experimental-xqciint             - 'Xqciint' (Qualcomm uC Interrupts Extension).
+    experimental-xqciio              - 'Xqciio' (Qualcomm uC External Input Output Extension).
+    experimental-xqcilb              - 'Xqcilb' (Qualcomm uC Long Branch Extension).
+    experimental-xqcili              - 'Xqcili' (Qualcomm uC Load Large Immediate Extension).
+    experimental-xqcilia             - 'Xqcilia' (Qualcomm uC Large Immediate Arithmetic Extension).
+    experimental-xqcilo              - 'Xqcilo' (Qualcomm uC Large Offset Load Store Extension).
+    experimental-xqcilsm             - 'Xqcilsm' (Qualcomm uC Load Store Multiple Extension).
+    experimental-xqcisim             - 'Xqcisim' (Qualcomm uC Simulation Hint Extension).
+    experimental-xqcisls             - 'Xqcisls' (Qualcomm uC Scaled Load Store Extension).
+    experimental-xqcisync            - 'Xqcisync' (Qualcomm uC Sync Delay Extension).
+    experimental-xrivosvisni         - 'XRivosVisni' (Rivos Vector Integer Small New).
+    experimental-xrivosvizip         - 'XRivosVizip' (Rivos Vector Register Zips).
+    experimental-xsfmclic            - 'XSfmclic' (SiFive CLIC Machine-mode CSRs).
+    experimental-xsfsclic            - 'XSfsclic' (SiFive CLIC Supervisor-mode CSRs).
+    experimental-zalasr              - 'Zalasr' (Load-Acquire and Store-Release Instructions).
+    experimental-zicfilp             - 'Zicfilp' (Landing pad).
+    experimental-zicfiss             - 'Zicfiss' (Shadow stack).
+    experimental-zvbc32e             - 'Zvbc32e' (Vector Carryless Multiplication with 32-bits elements).
+    experimental-zvkgs               - 'Zvkgs' (Vector-Scalar GCM instructions for Cryptography).
+    experimental-zvqdotq             - 'Zvqdotq' (Vector quad widening 4D Dot Product).
+    forced-atomics                   - Assume that lock-free native-width atomics are available.
+    h                                - 'H' (Hypervisor).
+    i                                - 'I' (Base Integer Instruction Set).
+    ld-add-fusion                    - Enable LD+ADD macrofusion.
+    log-vrgather                     - Has vrgather.vv with LMUL*log2(LMUL) latency.
+    lui-addi-fusion                  - Enable LUI+ADDI macro fusion.
+    mips-p8700                       - MIPS p8700 processor.
+    no-default-unroll                - Disable default unroll preference..
+    no-sink-splat-operands           - Disable sink splat operands to enable .vx, .vf,.wx, and .wf instructions.
+    no-trailing-seq-cst-fence        - Disable trailing fence for seq-cst store..
+    optimized-nf2-segment-load-store - vlseg2eN.v and vsseg2eN.v are implemented as a wide memory op and shuffle.
+    optimized-nf3-segment-load-store - vlseg3eN.v and vsseg3eN.v are implemented as a wide memory op and shuffle.
+    optimized-nf4-segment-load-store - vlseg4eN.v and vsseg4eN.v are implemented as a wide memory op and shuffle.
+    optimized-nf5-segment-load-store - vlseg5eN.v and vsseg5eN.v are implemented as a wide memory op and shuffle.
+    optimized-nf6-segment-load-store - vlseg6eN.v and vsseg6eN.v are implemented as a wide memory op and shuffle.
+    optimized-nf7-segment-load-store - vlseg7eN.v and vsseg7eN.v are implemented as a wide memory op and shuffle.
+    optimized-nf8-segment-load-store - vlseg8eN.v and vsseg8eN.v are implemented as a wide memory op and shuffle.
+    optimized-zero-stride-load       - Optimized (perform fewer memory operations)zero-stride vector load.
+    predictable-select-expensive     - Prefer likely predicted branches over selects.
+    prefer-vsetvli-over-read-vlenb   - Prefer vsetvli over read vlenb CSR to calculate VLEN.
+    prefer-w-inst                    - Prefer instructions with W suffix.
+    q                                - 'Q' (Quad-Precision Floating-Point).
+    reserve-x1                       - Reserve X1.
+    reserve-x10                      - Reserve X10.
+    reserve-x11                      - Reserve X11.
+    reserve-x12                      - Reserve X12.
+    reserve-x13                      - Reserve X13.
+    reserve-x14                      - Reserve X14.
+    reserve-x15                      - Reserve X15.
+    reserve-x16                      - Reserve X16.
+    reserve-x17                      - Reserve X17.
+    reserve-x18                      - Reserve X18.
+    reserve-x19                      - Reserve X19.
+    reserve-x2                       - Reserve X2.
+    reserve-x20                      - Reserve X20.
+    reserve-x21                      - Reserve X21.
+    reserve-x22                      - Reserve X22.
+    reserve-x23                      - Reserve X23.
+    reserve-x24                      - Reserve X24.
+    reserve-x25                      - Reserve X25.
+    reserve-x26                      - Reserve X26.
+    reserve-x27                      - Reserve X27.
+    reserve-x28                      - Reserve X28.
+    reserve-x29                      - Reserve X29.
+    reserve-x3                       - Reserve X3.
+    reserve-x30                      - Reserve X30.
+    reserve-x31                      - Reserve X31.
+    reserve-x4                       - Reserve X4.
+    reserve-x5                       - Reserve X5.
+    reserve-x6                       - Reserve X6.
+    reserve-x7                       - Reserve X7.
+    reserve-x8                       - Reserve X8.
+    reserve-x9                       - Reserve X9.
+    rva20s64                         - RISC-V rva20s64 profile.
+    rva20u64                         - RISC-V rva20u64 profile.
+    rva22s64                         - RISC-V rva22s64 profile.
+    rva22u64                         - RISC-V rva22u64 profile.
+    rva23s64                         - RISC-V rva23s64 profile.
+    rvb23s64                         - RISC-V rvb23s64 profile.
+    rvb23u64                         - RISC-V rvb23u64 profile.
+    rvi20u32                         - RISC-V rvi20u32 profile.
+    rvi20u64                         - RISC-V rvi20u64 profile.
+    save-restore                     - Enable save/restore..
+    sdext                            - 'Sdext' (External debugger).
+    sdtrig                           - 'Sdtrig' (Debugger triggers).
+    sha                              - 'Sha' (Augmented Hypervisor).
+    shcounterenw                     - 'Shcounterenw' (Support writeable hcounteren enable bit for any hpmcounter that is not read-only zero).
+    shgatpa                          - 'Shgatpa' (SvNNx4 mode supported for all modes supported by satp, as well as Bare).
+    shifted-zextw-fusion             - Enable SLLI+SRLI to be fused when computing (shifted) word zero extension.
+    shlcofideleg                     - 'Shlcofideleg' (Delegating LCOFI Interrupts to VS-mode).
+    short-forward-branch-opt         - Enable short forward branch optimization.
+    shtvala                          - 'Shtvala' (htval provides all needed values).
+    shvsatpa                         - 'Shvsatpa' (vsatp supports all modes supported by satp).
+    shvstvala                        - 'Shvstvala' (vstval provides all needed values).
+    shvstvecd                        - 'Shvstvecd' (vstvec supports Direct mode).
+    sifive7                          - SiFive 7-Series processors.
+    smaia                            - 'Smaia' (Advanced Interrupt Architecture Machine Level).
+    smcdeleg                         - 'Smcdeleg' (Counter Delegation Machine Level).
+    smcntrpmf                        - 'Smcntrpmf' (Cycle and Instret Privilege Mode Filtering).
+    smcsrind                         - 'Smcsrind' (Indirect CSR Access Machine Level).
+    smdbltrp                         - 'Smdbltrp' (Double Trap Machine Level).
+    smepmp                           - 'Smepmp' (Enhanced Physical Memory Protection).
+    smmpm                            - 'Smmpm' (Machine-level Pointer Masking for M-mode).
+    smnpm                            - 'Smnpm' (Machine-level Pointer Masking for next lower privilege mode).
+    smrnmi                           - 'Smrnmi' (Resumable Non-Maskable Interrupts).
+    smstateen                        - 'Smstateen' (Machine-mode view of the state-enable extension).
+    ssaia                            - 'Ssaia' (Advanced Interrupt Architecture Supervisor Level).
+    ssccfg                           - 'Ssccfg' (Counter Configuration Supervisor Level).
+    ssccptr                          - 'Ssccptr' (Main memory supports page table reads).
+    sscofpmf                         - 'Sscofpmf' (Count Overflow and Mode-Based Filtering).
+    sscounterenw                     - 'Sscounterenw' (Support writeable scounteren enable bit for any hpmcounter that is not read-only zero).
+    sscsrind                         - 'Sscsrind' (Indirect CSR Access Supervisor Level).
+    ssdbltrp                         - 'Ssdbltrp' (Double Trap Supervisor Level).
+    ssnpm                            - 'Ssnpm' (Supervisor-level Pointer Masking for next lower privilege mode).
+    sspm                             - 'Sspm' (Indicates Supervisor-mode Pointer Masking).
+    ssqosid                          - 'Ssqosid' (Quality-of-Service (QoS) Identifiers).
+    ssstateen                        - 'Ssstateen' (Supervisor-mode view of the state-enable extension).
+    ssstrict                         - 'Ssstrict' (No non-conforming extensions are present).
+    sstc                             - 'Sstc' (Supervisor-mode timer interrupts).
+    sstvala                          - 'Sstvala' (stval provides all needed values).
+    sstvecd                          - 'Sstvecd' (stvec supports Direct mode).
+    ssu64xl                          - 'Ssu64xl' (UXLEN=64 supported).
+    svade                            - 'Svade' (Raise exceptions on improper A/D bits).
+    svadu                            - 'Svadu' (Hardware A/D updates).
+    svbare                           - 'Svbare' (satp mode Bare supported).
+    svinval                          - 'Svinval' (Fine-Grained Address-Translation Cache Invalidation).
+    svnapot                          - 'Svnapot' (NAPOT Translation Contiguity).
+    svpbmt                           - 'Svpbmt' (Page-Based Memory Types).
+    svvptc                           - 'Svvptc' (Obviating Memory-Management Instructions after Marking PTEs Valid).
+    tagged-globals                   - Use an instruction sequence for taking the address of a global that allows a memory tag in the upper address bits.
+    use-postra-scheduler             - Schedule again after register allocation.
+    ventana-veyron                   - Ventana Veyron-Series processors.
+    vl-dependent-latency             - Latency of vector instructions is dependent on the dynamic value of vl.
+    vxrm-pipeline-flush              - VXRM writes causes pipeline flush.
+    xandesbfhcvt                     - 'XAndesBFHCvt' (Andes Scalar BFLOAT16 Conversion Extension).
+    xandesperf                       - 'XAndesPerf' (Andes Performance Extension).
+    xandesvbfhcvt                    - 'XAndesVBFHCvt' (Andes Vector BFLOAT16 Conversion Extension).
+    xandesvdot                       - 'XAndesVDot' (Andes Vector Dot Product Extension).
+    xandesvpackfph                   - 'XAndesVPackFPH' (Andes Vector Packed FP16 Extension).
+    xandesvsintload                  - 'XAndesVSIntLoad' (Andes Vector INT4 Load Extension).
+    xcvalu                           - 'XCValu' (CORE-V ALU Operations).
+    xcvbi                            - 'XCVbi' (CORE-V Immediate Branching).
+    xcvbitmanip                      - 'XCVbitmanip' (CORE-V Bit Manipulation).
+    xcvelw                           - 'XCVelw' (CORE-V Event Load Word).
+    xcvmac                           - 'XCVmac' (CORE-V Multiply-Accumulate).
+    xcvmem                           - 'XCVmem' (CORE-V Post-incrementing Load & Store).
+    xcvsimd                          - 'XCVsimd' (CORE-V SIMD ALU).
+    xmipscbop                        - 'XMIPSCBOP' (MIPS Software Prefetch).
+    xmipscmov                        - 'XMIPSCMov' (MIPS conditional move instruction (mips.ccmov)).
+    xmipslsp                         - 'XMIPSLSP' (MIPS optimization for hardware load-store bonding).
+    xsfcease                         - 'XSfcease' (SiFive sf.cease Instruction).
+    xsfmm128t                        - 'XSfmm128t' (TE=128 configuration).
+    xsfmm16t                         - 'XSfmm16t' (TE=16 configuration).
+    xsfmm32a16f                      - 'XSfmm32a16f' (TEW=32-bit accumulation, operands - float: 16b, widen=2 (IEEE, BF)).
+    xsfmm32a32f                      - 'XSfmm32a32f' (TEW=32-bit accumulation, operands - float: 32b).
+    xsfmm32a8f                       - 'XSfmm32a8f' (TEW=32-bit accumulation, operands - float: fp8).
+    xsfmm32a8i                       - 'XSfmm32a8i' (TEW=32-bit accumulation, operands - int: 8b).
+    xsfmm32t                         - 'XSfmm32t' (TE=32 configuration).
+    xsfmm64a64f                      - 'XSfmm64a64f' (TEW=64-bit accumulation, operands - float: fp64).
+    xsfmm64t                         - 'XSfmm64t' (TE=64 configuration).
+    xsfmmbase                        - 'XSfmmbase' (All non arithmetic instructions for all TEWs and sf.vtzero).
+    xsfvcp                           - 'XSfvcp' (SiFive Custom Vector Coprocessor Interface Instructions).
+    xsfvfnrclipxfqf                  - 'XSfvfnrclipxfqf' (SiFive FP32-to-int8 Ranged Clip Instructions).
+    xsfvfwmaccqqq                    - 'XSfvfwmaccqqq' (SiFive Matrix Multiply Accumulate Instruction (4-by-4)).
+    xsfvqmaccdod                     - 'XSfvqmaccdod' (SiFive Int8 Matrix Multiplication Instructions (2-by-8 and 8-by-2)).
+    xsfvqmaccqoq                     - 'XSfvqmaccqoq' (SiFive Int8 Matrix Multiplication Instructions (4-by-8 and 8-by-4)).
+    xsifivecdiscarddlone             - 'XSiFivecdiscarddlone' (SiFive sf.cdiscard.d.l1 Instruction).
+    xsifivecflushdlone               - 'XSiFivecflushdlone' (SiFive sf.cflush.d.l1 Instruction).
+    xtheadba                         - 'XTHeadBa' (T-Head address calculation instructions).
+    xtheadbb                         - 'XTHeadBb' (T-Head basic bit-manipulation instructions).
+    xtheadbs                         - 'XTHeadBs' (T-Head single-bit instructions).
+    xtheadcmo                        - 'XTHeadCmo' (T-Head cache management instructions).
+    xtheadcondmov                    - 'XTHeadCondMov' (T-Head conditional move instructions).
+    xtheadfmemidx                    - 'XTHeadFMemIdx' (T-Head FP Indexed Memory Operations).
+    xtheadmac                        - 'XTHeadMac' (T-Head Multiply-Accumulate Instructions).
+    xtheadmemidx                     - 'XTHeadMemIdx' (T-Head Indexed Memory Operations).
+    xtheadmempair                    - 'XTHeadMemPair' (T-Head two-GPR Memory Operations).
+    xtheadsync                       - 'XTHeadSync' (T-Head multicore synchronization instructions).
+    xtheadvdot                       - 'XTHeadVdot' (T-Head Vector Extensions for Dot).
+    xventanacondops                  - 'XVentanaCondOps' (Ventana Conditional Ops).
+    xwchc                            - 'Xwchc' (WCH/QingKe additional compressed opcodes).
+    zcd                              - 'Zcd' (Compressed Double-Precision Floating-Point Instructions).
+    zce                              - 'Zce' (Compressed extensions for microcontrollers).
+    zcf                              - 'Zcf' (Compressed Single-Precision Floating-Point Instructions).
+    zclsd                            - 'Zclsd' (Compressed Load/Store Pair Instructions).
+    zcmp                             - 'Zcmp' (sequenced instructions for code-size reduction).
+    zcmt                             - 'Zcmt' (table jump instructions for code-size reduction).
+    zexth-fusion                     - Enable SLLI+SRLI to be fused to zero extension of halfword.
+    zextw-fusion                     - Enable SLLI+SRLI to be fused to zero extension of word.
+    ziccamoc                         - 'Ziccamoc' (Main Memory Supports Atomics in Zacas).
+    zilsd                            - 'Zilsd' (Load/Store Pair Instructions).
+    zmmul                            - 'Zmmul' (Integer Multiplication).
+
+Use +feature to enable a feature, or -feature to disable it.
+For example, rustc -C target-cpu=mycpu -C target-feature=+feature1,-feature2
+
+Code-generation features cannot be used in cfg or #[target_feature],
+and may be renamed or removed in a future version of LLVM or rustc.
+

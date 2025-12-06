@@ -1,5 +1,5 @@
 [workspace]
-members = ["kernel", "lib/*"]
+members = ["os"]
 resolver = "2"
 
 [workspace.dependencies]
