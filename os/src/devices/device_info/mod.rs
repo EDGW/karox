@@ -11,7 +11,7 @@ use crate::error::MessageError;
 pub struct MemoryAreaInfo {
     /// Starting address
     pub start: usize,
-    /// Length 
+    /// Length
     pub length: usize,
 }
 

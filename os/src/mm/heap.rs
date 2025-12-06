@@ -3,7 +3,6 @@
 //! It's the earliest-initialized module for the kernel can't run without dynamic allocation
 
 use buddy_system_allocator::LockedHeap;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{arch::mm::config::KERNEL_HEAP_SIZE, define_struct_aligned, kserial_println};
 

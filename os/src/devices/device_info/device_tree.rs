@@ -232,18 +232,11 @@ pub trait DeviceTree: DeviceInfo {
 #[derive(Debug)]
 pub enum DeviceTreeError {
     /// Requested property was not found on the node.
-    PropertyNotFound {
-        prop_name: MaybeOwnedStr,
-    },
+    PropertyNotFound { prop_name: MaybeOwnedStr },
     /// Requested child node was not found.
-    NodeNotFound {
-        node_name: MaybeOwnedStr,
-    },
+    NodeNotFound { node_name: MaybeOwnedStr },
     /// The `#address-cells`/`#size-cells` value is not supported.
-    UnsupportedAddressType {
-        address_cells: u32,
-        size_cells: u32,
-    },
+    UnsupportedAddressType { address_cells: u32, size_cells: u32 },
     /// A property had an invalid format when parsed.
     InvalidPropFormat {
         prop_name: MaybeOwnedStr,

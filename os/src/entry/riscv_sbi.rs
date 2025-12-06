@@ -1,5 +1,5 @@
 //! The entry point of the operating system on risc-v
-//! 
+//!
 //! Initialization Steps:
 //! 1. starting from [_start]: set up a early boot table and the stack pointer.
 //! 2. jumping to [start]: clear the bss and create a fdt tree instance (uninitialized).
@@ -10,10 +10,7 @@ use core::arch::naked_asm;
 use crate::{
     arch::mm::{
         KERNEL_STACK,
-        config::{
-            KERNEL_SPACE_OFFSET, KERNEL_STACK_SHIFT, /*KERNEL_STACK_SIZE,*/
-            PAGE_WIDTH,
-        },
+        config::{KERNEL_SPACE_OFFSET, KERNEL_STACK_SHIFT /*KERNEL_STACK_SIZE,*/, PAGE_WIDTH},
         paging::{BOOT_PTABLE, CrSatpModes, CrSatpValue, PhysicalPageNum},
     },
     devices::device_info::FdtTree,
@@ -22,12 +19,12 @@ use crate::{
 };
 
 /// Boot `satp` register value
-/// 
+///
 /// The paging mod is set to SV39, and the ppn is set during [_start]
 const BOOT_SATP: CrSatpValue = CrSatpValue::create(CrSatpModes::SV39, 0, PhysicalPageNum(0));
 
 /// The entry point of the operating system
-/// 
+///
 /// Build an early boot table and set up the stack, then jumping to [start]
 #[unsafe(no_mangle)]
 #[unsafe(naked)]

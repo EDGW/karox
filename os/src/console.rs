@@ -5,16 +5,14 @@ use core::fmt::{Arguments, Error, Write};
 
 use crate::arch::{SBITable, SBITrait};
 
-
 struct SerialOut;
 
-impl Write for SerialOut{
+impl Write for SerialOut {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         SBITable::console_putstr(s).map_err(|_| Error)?;
         Ok(())
     }
 }
-
 
 pub fn serial_print(args: Arguments) {
     SerialOut.write_fmt(args).unwrap();

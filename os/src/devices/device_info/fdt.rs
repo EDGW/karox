@@ -398,13 +398,9 @@ impl DeviceTree for FdtTree {
 #[derive(Debug)]
 pub enum FdtError {
     /// Header magic number did not match the expected FDT magic.
-    MagicError {
-        magic: u32,
-    },
+    MagicError { magic: u32 },
     /// FDT version is out of supported/compatible range.
-    VersionError {
-        version: u32,
-    },
+    VersionError { version: u32 },
     /// The FDT contains a string that is not valid UTF-8.
     Utf8Error {
         err: Utf8Error,
@@ -412,9 +408,7 @@ pub enum FdtError {
         ptr_str: *const u8,
     },
     /// Packed [DeviceTreeError]
-    DeviceTreeError {
-        err: DeviceTreeError,
-    },
+    DeviceTreeError { err: DeviceTreeError },
     /// Encountered an unexpected node tag while parsing the structure block.
     InvalidNodeType {
         cur_type: u32,
