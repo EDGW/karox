@@ -17,6 +17,9 @@ impl SBITrait for SBITable {
         }
         Ok(())
     }
+    fn init() {
+        
+    }
 }
 
 #[inline(always)]

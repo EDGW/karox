@@ -1,3 +1,10 @@
+//! The entry point of the operating system on risc-v
+//! 
+//! Initialization Steps:
+//! 1. starting from [_start]: set up a early boot table and the stack pointer.
+//! 2. jumping to [start]: clear the bss and create a fdt tree instance (uninitialized).
+//! 3. jumping to [crate::rust_main]
+
 use core::arch::naked_asm;
 
 use crate::{
@@ -9,13 +16,19 @@ use crate::{
         },
         paging::{BOOT_PTABLE, CrSatpModes, CrSatpValue, PhysicalPageNum},
     },
-    devices::device_tree::FdtTree,
+    devices::device_info::FdtTree,
     entry::shared::clear_bss,
     kserial_println, rust_main,
 };
 
+/// Boot `satp` register value
+/// 
+/// The paging mod is set to SV39, and the ppn is set during [_start]
 const BOOT_SATP: CrSatpValue = CrSatpValue::create(CrSatpModes::SV39, 0, PhysicalPageNum(0));
 
+/// The entry point of the operating system
+/// 
+/// Build an early boot table and set up the stack, then jumping to [start]
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
 #[unsafe(link_section = ".text.entry")]
@@ -59,6 +72,8 @@ unsafe extern "C" fn _start(hart_id: usize, dtb_addr: usize) {
         start = sym start,
     )
 }
+
+/// Step 2
 fn start(hart_id: usize, dtb_ptr: usize) -> ! {
     clear_bss();
     kserial_println!("karox entry for RISC-V architecture.");

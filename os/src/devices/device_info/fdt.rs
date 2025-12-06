@@ -1,3 +1,5 @@
+//! This module provides functionalities to resolve a flattened device tree
+
 use core::str::{self, Utf8Error};
 
 use alloc::{boxed::Box, slice, string::String, vec::Vec};
@@ -6,20 +8,31 @@ use spin::{once::Once, rwlock::RwLock};
 
 use crate::{
     arch::endian::{BigEndian32, EndianData},
-    devices::device_tree::{
-        DeviceTree, MemoryAreaInfo,
-        device_tree::{DeviceNode, DeviceProp, DeviceTreeError, EmbeddedDeviceInfo},
+    devices::device_info::{
+        DeviceInfo, MemoryAreaInfo,
+        device_tree::{DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo},
     },
     error::MessageError,
     mm::types::{MaybeOwned, MaybeOwnedStr},
 };
 
+/// Parser and holder for a Flattened Device Tree (FDT) blob.
+///
+/// `FdtTree` stores a pointer to the FDT in memory and lazily builds the
+/// in-memory [DeviceNode] tree and extracted device information.
 pub struct FdtTree {
+    /// Raw pointer to the FDT blob interpreted as big-endian 32-bit words.
     fdt_ptr: *const BigEndian32,
+    /// Root node parsed from the FDT (protected by an RwLock for concurrent access).
     pub fdt_node: RwLock<Option<DeviceNode>>,
+    /// Lazily-initialized extracted device info (memory regions, devices, etc.).
     pub devices: Once<EmbeddedDeviceInfo>,
 }
 
+/// Raw on-disk Flattened Device Tree header (big-endian fields).
+///
+/// This maps directly to the FDT header structure; fields are stored as
+/// big-endian 32-bit values and should be interpreted as `EndianData`.
 pub struct FdtHeader {
     pub magic: BigEndian32,
     pub totalsize: BigEndian32,
@@ -34,22 +47,28 @@ pub struct FdtHeader {
 }
 
 bitflags! {
+    /// Type tags found in the FDT structure block.
     pub struct FdtNodeType : u32{
+        /// Begin a node (followed by its name string)
         const FDT_BEGIN_NODE  = 0x01;
+        /// End a node
         const FDT_END_NODE    = 0x02;
+        /// A property entry (length, nameoff, data)
         const FDT_PROP        = 0x03;
+        /// No-op padding word
         const FDT_NOP         = 0x04;
+        /// End of the structure block
         const FDT_END         = 0x09;
     }
 }
 
-/// Read a word without advcancing the pointer
+/// Read a 32-bit big-endian word from `ptr` without advancing the pointer.
 #[inline(always)]
 fn peek(ptr: &mut *const BigEndian32) -> u32 {
     unsafe { (**ptr).value() }
 }
 
-/// Read a word and advance the pointer
+/// Read a 32-bit big-endian word from `ptr` and advance the pointer by 4 bytes.
 #[inline(always)]
 fn read(ptr: &mut *const BigEndian32) -> u32 {
     unsafe {
@@ -59,7 +78,9 @@ fn read(ptr: &mut *const BigEndian32) -> u32 {
     }
 }
 
-/// Read `len` bytes from the pointer, and automatically move the pointer to keep it 4-byte-aligned.
+/// Read `len` bytes starting at `ptr` and advance `ptr` to the next 4-byte aligned position.
+///
+/// Returns a `'static` slice that points into the original FDT memory blob.
 #[inline(always)]
 fn readbytes_aligned(ptr: &mut *const BigEndian32, len: u32) -> &'static [u8] {
     let s = *ptr as *const u8;
@@ -75,7 +96,7 @@ fn readbytes_aligned(ptr: &mut *const BigEndian32, len: u32) -> &'static [u8] {
     }
 }
 
-/// Advancing the pointer to the first value that is not `0` or [FdtNodeType::FDT_NOP]
+/// Advance `ptr` past zero words and NOPs to the next meaningful token.
 #[inline(always)]
 fn skip(ptr: &mut *const BigEndian32) {
     let mut p = peek(ptr);
@@ -87,7 +108,10 @@ fn skip(ptr: &mut *const BigEndian32) {
     }
 }
 
-/// Read a null terminated string from the pointer, and automatically move the pointer to keep it 4-byte-aligned.
+/// Read a NUL-terminated string from `ptr` and advance `ptr` to the next aligned position.
+///
+/// Returns a borrowed `'static` str pointing into the FDT blob, or an `Utf8Error`
+/// wrapped in `FdtError` if the bytes are not valid UTF-8.
 #[inline(always)]
 fn readstr_aligned(ptr: &mut *const BigEndian32) -> Result<&'static str, FdtError> {
     let start = *ptr as *const u8;
@@ -114,9 +138,10 @@ fn readstr_aligned(ptr: &mut *const BigEndian32) -> Result<&'static str, FdtErro
     }
 }
 
-/// Read a word as a node type and check whether the node type equal the supposed type
+/// Read a tag word and verify it equals `supposed`.
 ///
-/// Returns nothing if check succeeds, or throws a [FdtError::InvalidNodeType].
+/// Returns `Ok(())` if the tag matches, otherwise returns
+/// `FdtError::InvalidNodeType` with the current tag and pointer.
 fn read_and_check(ptr: &mut *const BigEndian32, supposed: FdtNodeType) -> Result<(), FdtError> {
     let node_type = peek(ptr);
     read(ptr);
@@ -131,11 +156,18 @@ fn read_and_check(ptr: &mut *const BigEndian32, supposed: FdtNodeType) -> Result
 }
 
 impl FdtTree {
+    /// Expected FDT magic number (0xd00dfeed).
     pub const FDT_MAGIC: u32 = 0xd00dfeed;
+    /// The FDT version this parser targets.
     pub const FDT_VERSION: usize = 17;
+    /// The last compatible FDT version accepted by this parser.
     pub const LAST_COMP_VERSION: usize = 16;
     // region: constructor
 
+    /// Create an `FdtTree` from a raw pointer to an FDT blob in memory.
+    ///
+    /// This does not validate the blob; call `validate()` before using parser
+    /// helpers to ensure the header and version are acceptable.
     #[inline(always)]
     pub fn from_ptr(ptr: *const u8) -> FdtTree {
         FdtTree {
@@ -166,20 +198,24 @@ impl FdtTree {
 
     // endregion
 
-    /// Get the fdt header pointer
+    /// Return a reference to the FDT header.
     ///
-    /// **The function only performs pointer type conversion and does not guarantee the validity of the returned data.**
+    /// Note: this only performs a pointer cast. The header contents should be
+    /// validated with `validate()` before relying on the fields.
     #[inline(always)]
     pub fn get_header<'a>(&'a self) -> &'a FdtHeader {
         unsafe { &*(self.fdt_ptr as *const FdtHeader) }
     }
 
-    /// Check whether the fdt header is valid, including checking magic number and compatible version.
+    /// Validate the FDT header (magic number and compatible version range).
     ///
-    /// Returns nothing if the check succeeds, or throws a [FdtError]
+    /// Returns `Ok(())` on success, or an `FdtError` describing the failure.
     pub fn validate(&self) -> Result<(), FdtError> {
         let header = self.get_header();
-        kserial_println!("header {:#x}",header as *const FdtHeader as *const u8 as usize);
+        kserial_println!(
+            "header {:#x}",
+            header as *const FdtHeader as *const u8 as usize
+        );
         let magic = header.magic.value();
 
         // 1. Check the magic number
@@ -197,7 +233,10 @@ impl FdtTree {
         Ok(())
     }
 
-    /// Read a null-terminated string in the string table.
+    /// Read a null-terminated string from the FDT string table at `offset`.
+    ///
+    /// Returns a borrowed `'static` str pointing into the FDT blob or an
+    /// `FdtError::Utf8Error` if the bytes are not valid UTF-8.
     pub fn get_string(&self, offset: u32) -> Result<&'static str, FdtError> {
         let s = self.get_pointer8(self.get_header().off_dt_strings.value() + offset);
         let bound = self.get_end8();
@@ -218,7 +257,9 @@ impl FdtTree {
         }
     }
 
-    /// Read all property nodes
+    /// Read consecutive property entries from the structure block and return them.
+    ///
+    /// Stops when a non-`FDT_PROP` tag is encountered and returns the collected props.
     fn read_props(&self, ptr: &mut *const BigEndian32) -> Result<Vec<DeviceProp>, FdtError> {
         let mut res = Vec::<DeviceProp>::new();
         loop {
@@ -238,7 +279,9 @@ impl FdtTree {
         }
     }
 
-    /// Read a node
+    /// Parse a single node (name, properties and child nodes) from the structure block.
+    ///
+    /// Recursively parses subnodes until the matching `FDT_END_NODE` is found.
     fn read_node(&self, ptr: &mut *const BigEndian32) -> Result<DeviceNode, FdtError> {
         skip(ptr);
         read_and_check(ptr, FdtNodeType::FDT_BEGIN_NODE)?;
@@ -283,7 +326,9 @@ impl FdtTree {
         })
     }
 
-    /// Load all the nodes and save the root node
+    /// Parse the entire structure block and store the root [DeviceNode].
+    ///
+    /// After calling this the in-memory node tree is available via [Self::fdt_node].
     pub fn load_nodes(&self) -> Result<(), FdtError> {
         let mut ptr = self.get_pointer32(self.get_header().off_dt_struct.value());
         let node = self.read_node(&mut ptr)?;
@@ -293,7 +338,7 @@ impl FdtTree {
         Ok(())
     }
 
-    /// Print all the nodes in a non-standard format, only for debug use
+    /// Debug helper to print the node tree in a compact, non-standard format.
     #[allow(unused)]
     pub fn print_nodes(&self, node: &DeviceNode, tab: usize) {
         let tabstr = String::from("\t").repeat(tab);
@@ -307,6 +352,7 @@ impl FdtTree {
         }
     }
 
+    /// Return the parsed [EmbeddedDeviceInfo] if the device tree has been initialized.
     pub fn get_device_info(&self) -> Result<&EmbeddedDeviceInfo, String> {
         self.devices
             .get()
@@ -314,22 +360,24 @@ impl FdtTree {
     }
 }
 
-impl DeviceTree for FdtTree {
+impl DeviceInfo for FdtTree {
     type TError = FdtError;
-    type TDataType = BigEndian32;
 
+    /// Initialize the FDT parser and extract device info.
+    ///
+    /// This validates the header, parses the node tree and populates the
+    /// extracted [EmbeddedDeviceInfo] used by the rest of the kernel.
     fn init(&self) -> Result<(), FdtError> {
         self.validate()?;
         self.load_nodes()?;
-        let dev = self.init_devices().map_err(|err| FdtError::DeviceTreeError { err: err })?;
-        self.devices.call_once(||dev);
+        let dev = self
+            .init_devices()
+            .map_err(|err| FdtError::DeviceTreeError { err: err })?;
+        self.devices.call_once(|| dev);
         Ok(())
     }
 
-    fn get_root_node_lock(&self) -> &RwLock<Option<DeviceNode>> {
-        &self.fdt_node
-    }
-
+    /// Return memory area info parsed from the device tree.
     fn get_mem_info(&self) -> Result<&Vec<MemoryAreaInfo>, FdtError> {
         Ok(&self
             .devices
@@ -339,26 +387,41 @@ impl DeviceTree for FdtTree {
     }
 }
 
+impl DeviceTree for FdtTree {
+    type TDataType = BigEndian32;
+
+    fn get_root_node_lock(&self) -> &RwLock<Option<DeviceNode>> {
+        &self.fdt_node
+    }
+}
+
 #[derive(Debug)]
 pub enum FdtError {
+    /// Header magic number did not match the expected FDT magic.
     MagicError {
         magic: u32,
     },
+    /// FDT version is out of supported/compatible range.
     VersionError {
         version: u32,
     },
+    /// The FDT contains a string that is not valid UTF-8.
     Utf8Error {
         err: Utf8Error,
+        /// Pointer to the offending string in the blob.
         ptr_str: *const u8,
     },
+    /// Packed [DeviceTreeError]
     DeviceTreeError {
         err: DeviceTreeError,
     },
+    /// Encountered an unexpected node tag while parsing the structure block.
     InvalidNodeType {
         cur_type: u32,
         acceptable_types: FdtNodeType,
         ptr: *const u8,
     },
+    /// Device tree parsing or initialization has not been performed yet.
     NotInitializedError,
 }
 

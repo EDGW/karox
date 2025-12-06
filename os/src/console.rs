@@ -1,3 +1,6 @@
+// TODO: Temporarily Used
+#![allow(missing_docs)]
+
 use core::fmt::{Arguments, Error, Write};
 
 use crate::arch::{SBITable, SBITrait};

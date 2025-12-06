@@ -1,3 +1,6 @@
+//! This crete packed some references to the symbols defined in the linker script
+#[allow(missing_docs)]
+
 unsafe extern "C" {
     pub unsafe fn _skernel();
     pub unsafe fn _stext();

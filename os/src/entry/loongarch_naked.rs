@@ -18,7 +18,6 @@ use crate::{
     rust_main,
 };
 
-
 const BOOT_DMW0: CrDMWValue = CrDMWValue::create(
     PrvLevelBits::PLV0,
     MemAccessType::STRONG_NONCACHE,
