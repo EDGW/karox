@@ -6,7 +6,7 @@ pub use fdt::FdtTree;
 
 use crate::error::MessageError;
 
-/// A section of the universal memory
+/// A section of the general memory
 #[derive(Debug)]
 pub struct MemoryAreaInfo {
     /// Starting address
@@ -23,6 +23,6 @@ pub trait DeviceInfo {
     /// Initialize the device tree
     fn init(&self) -> Result<(), Self::TError>;
 
-    /// Get all the universal memory sections
+    /// Get all the general memory sections
     fn get_mem_info(&self) -> Result<&Vec<MemoryAreaInfo>, Self::TError>;
 }

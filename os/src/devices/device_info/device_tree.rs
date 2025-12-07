@@ -1,3 +1,8 @@
+use core::{
+    fmt::Debug,
+    ops::{Add, Sub},
+};
+
 use alloc::{boxed::Box, slice, vec, vec::Vec};
 use spin::rwlock::RwLock;
 
@@ -9,16 +14,90 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 /// Simple range structure used to represent start/length pairs parsed from properties.
-pub struct DPRange<T> {
+pub struct DPRange<T: Debug> {
     /// Start address (or index) of the range.
     pub start: T,
     /// Length (size) of the range.
     pub length: T,
 }
 
-// endregion
+impl<T: Debug> DPRange<T> {
+    #[inline(always)]
+    pub fn overlap(&self, another: &DPRange<T>) -> bool
+    where
+        T: Copy + Add<Output = T> + PartialOrd + Sub<Output = T>,
+    {
+        if self.empty() || another.empty() {
+            return false;
+        }
+        let left = self.start;
+        let right = left + self.length;
+        let al = another.start;
+        let ar = al + another.length;
+        if right < al {
+            return false;
+        }
+        if left > ar {
+            return false;
+        }
+        return true;
+    }
+    pub fn empty(&self) -> bool
+    where
+        T: Add<Output = T> + PartialEq + Copy,
+    {
+        self.start + self.length == self.start
+    }
+}
+
+impl<T: Debug + Copy + Add<Output = T> + Ord + Sub<Output = T>> Sub for DPRange<T> {
+    type Output = [Option<DPRange<T>>; 2];
+    fn sub(self, rhs: Self) -> Self::Output {
+        if self.overlap(&rhs) {
+            if self.start < rhs.start && self.start + self.length > rhs.start + rhs.length {
+                [
+                    Some(DPRange {
+                        start: self.start,
+                        length: rhs.start - self.start,
+                    }),
+                    Some(DPRange {
+                        start: rhs.start + rhs.length,
+                        length: self.start + self.length - rhs.start - rhs.length,
+                    }),
+                ]
+            }
+            else if self.start > rhs.start && self.start + self.length < rhs.start + rhs.length {
+                [None, None]
+            }
+            else {
+                let res;
+                if self.start < rhs.start {
+                    res = DPRange {
+                        start: self.start,
+                        length: rhs.start - self.start,
+                    };
+                } else {
+                    res = DPRange {
+                        start: rhs.start + rhs.length,
+                        length: self.start + self.length - rhs.start - rhs.length,
+                    };
+                }
+                if res.empty() {
+                    [None, None]
+                } else {
+                    [Some(res), None]
+                }
+            }
+        } else if !self.empty() {
+            [Some(self), None]
+        } else {
+            [None, None]
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 /// Cell width descriptor
 ///
@@ -26,9 +105,9 @@ pub struct DPRange<T> {
 /// and sizes respectively
 pub struct RegCellWidth {
     /// Number of 32-bit cells used to encode an address.
-    address: u32,
+    pub address: u32,
     /// Number of 32-bit cells used to encode a size/length.
-    size: u32,
+    pub size: u32,
 }
 
 /// A device tree node.
@@ -147,6 +226,7 @@ impl DeviceNode {
         }
         res
     }
+    
 }
 
 #[derive(Debug)]
@@ -178,21 +258,29 @@ pub trait DeviceTree: DeviceInfo {
     /// Endian-aware 32-bit cell reader used when interpreting property payloads.
     type TDataType: EndianData<u32>;
 
+    /// Convert the [DeviceTreeError] to [DeviceInfo::TError].
+    fn wrap_error(err: DeviceTreeError) -> Self::TError;
+
     /// Return a reference to the `RwLock` guarding the optional root `DeviceNode`.
     ///
     /// The lock is used by default helper implementations to access the
     /// parsed tree.
-    fn get_root_node_lock(&self) -> &RwLock<Option<DeviceNode>>;
+    fn get_root_node_lock(&self) -> Result<&RwLock<Option<DeviceNode>>, Self::TError>;
 
     /// Read `#address-cells` and `#size-cells` from the root node
-    fn get_cell_size(&self) -> Result<RegCellWidth, DeviceTreeError> {
-        let guard = self.get_root_node_lock().read();
-        let root_node = guard.as_ref().unwrap();
+    fn get_cell_size(&self) -> Result<RegCellWidth, Self::TError> {
+        let guard = self.get_root_node_lock()?.read();
+        let root_node = guard
+            .as_ref()
+            .ok_or(DeviceTreeError::NotInitializedError)
+            .map_err(Self::wrap_error)?;
         let addr_cells = root_node
-            .get_value_as::<Self::TDataType>(MaybeOwned::Static("#address-cells"))?
+            .get_value_as::<Self::TDataType>(MaybeOwned::Static("#address-cells"))
+            .map_err(Self::wrap_error)?
             .value();
         let size_cells = root_node
-            .get_value_as::<Self::TDataType>(MaybeOwned::Static("#size-cells"))?
+            .get_value_as::<Self::TDataType>(MaybeOwned::Static("#size-cells"))
+            .map_err(Self::wrap_error)?
             .value();
         Ok(RegCellWidth {
             address: addr_cells,
@@ -200,29 +288,61 @@ pub trait DeviceTree: DeviceInfo {
         })
     }
 
-    /// Initialize basic devices.
-    fn init_devices(&self) -> Result<EmbeddedDeviceInfo, DeviceTreeError> {
-        let guard = self.get_root_node_lock().read();
-        let root_node = guard.as_ref().unwrap();
-
-        let cell_sz = self.get_cell_size()?;
-        validate_cell_size(&cell_sz)?;
-
+    fn calc_mem_area(&self, root_node: &DeviceNode, cell_sz: &RegCellWidth) -> Result<Vec<MemoryAreaInfo>, Self::TError>{
+        let rsv = self.get_mem_rsv_map()?;
         let mem_area =
             root_node
                 .find_nodes("memory")
                 .iter()
                 .try_fold(vec![], |mut acc, &val| {
-                    val.get_reg::<Self::TDataType>(&cell_sz)?
+                    val.get_reg::<Self::TDataType>(cell_sz)
+                        .map_err(Self::wrap_error)?
                         .iter()
                         .for_each(|reg| {
-                            acc.push(MemoryAreaInfo {
-                                start: reg.start as usize,
-                                length: reg.length as usize,
-                            });
+                            let mut regvalue = Vec::new();
+                            regvalue.push(*reg);
+                            let mut temp = Vec::new();
+                            // In most common senses, there are only a few regs in memory map and reservation map,
+                            // so directly enumerating them is quicker
+                            for rsv_area in &rsv {
+                                for r in &regvalue{
+                                    let areas = *r - *rsv_area;
+                                    if let Some(area) = areas[0]{
+                                        temp.push(area);
+                                    }
+                                    if let Some(area) = areas[1]{
+                                        temp.push(area);
+                                    }
+                                }
+                                regvalue.clear();
+                                regvalue.append(&mut temp);
+                            }
+                            for item in regvalue{
+                                acc.push(MemoryAreaInfo { start: item.start as usize, length: item.length as usize });
+                            }
                         });
                     Ok(acc)
                 })?;
+        Ok(mem_area)
+    }
+
+    /// Get the memory reservation map. The reserved memory block are aligned to a page
+    ///
+    /// The result should contain the fdt itself.
+    fn get_mem_rsv_map(&self) -> Result<Vec<DPRange<u64>>, Self::TError>;
+
+    /// Initialize basic devices.
+    fn init_devices(&self) -> Result<EmbeddedDeviceInfo, Self::TError> {
+        let guard = self.get_root_node_lock()?.read();
+        let root_node = guard
+            .as_ref()
+            .ok_or(DeviceTreeError::NotInitializedError)
+            .map_err(Self::wrap_error)?;
+
+        let cell_sz = self.get_cell_size()?;
+        validate_cell_size(&cell_sz).map_err(Self::wrap_error)?;
+
+        let mem_area = self.calc_mem_area(root_node,&cell_sz)?;
 
         let info = EmbeddedDeviceInfo { mem_area: mem_area };
         Ok(info)
@@ -242,6 +362,8 @@ pub enum DeviceTreeError {
         prop_name: MaybeOwnedStr,
         err: InvalidPropFormatError,
     },
+    /// Device tree parsing or initialization has not been performed yet.
+    NotInitializedError,
 }
 
 #[derive(Debug)]

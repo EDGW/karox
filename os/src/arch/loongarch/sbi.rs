@@ -25,6 +25,6 @@ impl SBITrait for SBITable {
     }
     fn init() {
         let mut guard = UART.lock();
-        *guard = Some({ Box::new(Ns16550a::create(0x80000000_1fe001e0)) });
+        *guard = Some(Box::new(Ns16550a::create(0x80000000_1fe001e0)));
     }
 }

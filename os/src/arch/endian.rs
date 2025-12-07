@@ -5,35 +5,35 @@
 //! which defines [EndianData<T>::value] function to parse the data into the endianness of the current arch
 
 ///[u8] in Big Endianness
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct BigEndian8(u8);
 
 ///[u8] in Little Endianness
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct LittleEndian8(u8);
 
 ///[u16] in Big Endianness
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct BigEndian16(u16);
 
 ///[u16] in Little Endianness
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct LittleEndian16(u16);
 
 ///[u32] in Big Endianness
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct BigEndian32(u32);
 
 ///[u32] in Little Endianness
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct LittleEndian32(u32);
 
 ///[u64] in Big Endianness
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct BigEndian64(u64);
 
 ///[u64] in Little Endianness
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct LittleEndian64(u64);
 
 /// This trait defines a packed data in memory with some specific endianness.

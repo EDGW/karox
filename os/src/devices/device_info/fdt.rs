@@ -7,10 +7,10 @@ use bitflags::bitflags;
 use spin::{once::Once, rwlock::RwLock};
 
 use crate::{
-    arch::endian::{BigEndian32, EndianData},
+    arch::{endian::{BigEndian32, BigEndian64, EndianData}, mm::config::PAGE_SIZE},
     devices::device_info::{
         DeviceInfo, MemoryAreaInfo,
-        device_tree::{DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo},
+        device_tree::{DPRange, DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo},
     },
     error::MessageError,
     mm::types::{MaybeOwned, MaybeOwnedStr},
@@ -29,10 +29,11 @@ pub struct FdtTree {
     pub devices: Once<EmbeddedDeviceInfo>,
 }
 
-/// Raw on-disk Flattened Device Tree header (big-endian fields).
+/// Raw Flattened Device Tree header (big-endian fields).
 ///
 /// This maps directly to the FDT header structure; fields are stored as
 /// big-endian 32-bit values and should be interpreted as `EndianData`.
+#[repr(C)]
 pub struct FdtHeader {
     pub magic: BigEndian32,
     pub totalsize: BigEndian32,
@@ -44,6 +45,14 @@ pub struct FdtHeader {
     pub boot_cpuid_phys: BigEndian32,
     pub size_dt_strings: BigEndian32,
     pub size_dt_struct: BigEndian32,
+}
+
+/// Flattened Reserved Memory Entry
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct ReservedMemoryEntry{
+    pub addr: BigEndian64,
+    pub size: BigEndian64,
 }
 
 bitflags! {
@@ -212,10 +221,6 @@ impl FdtTree {
     /// Returns `Ok(())` on success, or an `FdtError` describing the failure.
     pub fn validate(&self) -> Result<(), FdtError> {
         let header = self.get_header();
-        kserial_println!(
-            "header {:#x}",
-            header as *const FdtHeader as *const u8 as usize
-        );
         let magic = header.magic.value();
 
         // 1. Check the magic number
@@ -371,8 +376,7 @@ impl DeviceInfo for FdtTree {
         self.validate()?;
         self.load_nodes()?;
         let dev = self
-            .init_devices()
-            .map_err(|err| FdtError::DeviceTreeError { err: err })?;
+            .init_devices()?;
         self.devices.call_once(|| dev);
         Ok(())
     }
@@ -382,7 +386,7 @@ impl DeviceInfo for FdtTree {
         Ok(&self
             .devices
             .get()
-            .ok_or(FdtError::NotInitializedError)?
+            .ok_or(FdtError::DeviceTreeError { err: DeviceTreeError::NotInitializedError })?
             .mem_area)
     }
 }
@@ -390,8 +394,62 @@ impl DeviceInfo for FdtTree {
 impl DeviceTree for FdtTree {
     type TDataType = BigEndian32;
 
-    fn get_root_node_lock(&self) -> &RwLock<Option<DeviceNode>> {
-        &self.fdt_node
+    /// Get the memory reservation map. The reserved memory block are aligned to a page
+    /// 
+    /// Automatically add the fdt itself to the reservation block if it's not in the reservation block.
+    fn get_mem_rsv_map(&self) -> Result<Vec<DPRange<u64>>, FdtError>{
+        let header = self.get_header();
+        let mut ptr = self.get_pointer8(header.off_mem_rsvmap.value()) as *const ReservedMemoryEntry;
+        let mut res = Vec::new();
+
+        // self
+        let mut self_range = DPRange{
+            start: self.fdt_ptr as u64,
+            length: header.totalsize.value() as u64
+        };
+        self_range.start -= self_range.start % PAGE_SIZE as u64;
+        let m2 = self_range.length % PAGE_SIZE as u64;
+        if m2 != 0{
+            self_range.length += PAGE_SIZE as u64 - m2;
+        }
+
+        // enumerate
+        unsafe{
+            let block = *ptr;
+            let mut addr = block.addr.value();
+            let mut size = block.size.value();
+            while addr != 0 || size != 0{
+                ptr = ptr.add(1);
+            }
+            let m1 = block.addr.value() % PAGE_SIZE as u64;
+            let m2 = block.size.value() % PAGE_SIZE as u64;
+            addr -= m1;
+            if m2 != 0{
+                size += PAGE_SIZE as u64 - m2;
+            }
+            let range = DPRange::<u64>{
+                start: addr,
+                length: size
+            } - self_range;
+            for t in range{
+                if let Some(sec) = t{
+                    res.push(sec);
+                }
+            }
+        }
+        if !self_range.empty(){
+            res.push(self_range);
+        }
+
+        Ok(res)
+    }
+
+    fn wrap_error(err: DeviceTreeError) -> FdtError {
+        FdtError::DeviceTreeError { err }
+    }
+
+    fn get_root_node_lock(& self) -> Result<&RwLock<Option<DeviceNode>>, FdtError> {
+        Ok(&self.fdt_node)
     }
 }
 
@@ -415,8 +473,6 @@ pub enum FdtError {
         acceptable_types: FdtNodeType,
         ptr: *const u8,
     },
-    /// Device tree parsing or initialization has not been performed yet.
-    NotInitializedError,
 }
 
 impl MessageError for FdtError {}

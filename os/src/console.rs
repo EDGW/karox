@@ -29,6 +29,6 @@ macro_rules! kserial_print {
 #[macro_export]
 macro_rules! kserial_println {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::console::serial_print(format_args!(concat!($fmt, "\n") $(, $($arg)+)?));   // Use LF instead of CR-LF
+        $crate::console::serial_print(format_args!(concat!($fmt, "\r\n") $(, $($arg)+)?));   // Use CR-LF to adapt to QEMU
     }
 }
