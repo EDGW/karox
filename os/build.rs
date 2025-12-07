@@ -24,6 +24,7 @@ fn main() {
     make_linker(entry, space);
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=linker.cross.ld");
+    println!("cargo:rerun-if-changed=../runtime/qemu-loongarch64.dtb");
     println!("cargo:rerun-if-changed=link_flags.json");
 }
 

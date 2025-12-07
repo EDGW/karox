@@ -3,8 +3,8 @@ ENTRY(_start)
 
 SECTIONS
 {
-    _skernel = .;
     .text : ALIGN(4K) {
+        _skernel = .;
         _stext = .;
         *(.text.entry)
 

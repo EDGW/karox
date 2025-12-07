@@ -20,19 +20,10 @@ pub mod devices;
 pub mod drivers;
 
 /// The main function of the operating system
-pub fn rust_main(_hart_id: usize, dev_tree: impl DeviceInfo) -> ! {
+pub fn rust_main(_hart_id: usize, dev_info: impl DeviceInfo) -> ! {
     kserial_println!("Initializing karox...");
     mm::heap::init_heap();
     SBITable::init();
-    init_devices(dev_tree);
+    devices::init(dev_info);
     loop {}
-}
-
-/// Resolve the device tree and initialize basic devices
-fn init_devices(dev_tree: impl DeviceInfo) {
-    kserial_println!("Initializing device tree...");
-    if let Err(err) = dev_tree.init() {
-        panic!("Initialize device tree failed {:?}", err);
-    }
-    kserial_println!("Memory info {:?}", dev_tree.get_mem_info().unwrap());
 }

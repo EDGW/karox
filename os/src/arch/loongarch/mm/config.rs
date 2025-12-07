@@ -4,7 +4,7 @@
 pub const KERNEL_HEAP_SIZE: usize = 128 * 0x10_0000; // 128MiB
 
 /// Fixed Kernel Stack Size
-pub const KERNEL_STACK_SIZE: usize = 8 * 0x10_0000; // 8MiB
+pub const KERNEL_STACK_SIZE: usize = 128 * 0x400; // 128KiB
 /// Fixed Kernel Stack Size represented in bit shift
 pub const KERNEL_STACK_SHIFT: usize = 20 + 3; // 8MiB
 
