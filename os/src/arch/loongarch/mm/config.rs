@@ -20,7 +20,7 @@ pub const PTABLE_ENTRY_COUNT: usize = 512;
 pub const MAX_HARTS: usize = 16;
 
 /// The kernel space offset
-pub const KERNEL_SPACE_OFFSET: usize = 0xffff_ffc0_0000_0000;
+pub const KERNEL_SPACE_OFFSET: usize = 0x9000_0000_0000_0000;
 
 /// The MMIO space offset
 pub const MMIO_OFFSET: usize = 0x8000_0000_0000_0000;
