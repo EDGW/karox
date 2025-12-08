@@ -1,5 +1,5 @@
 //! Karox Operating System
-#![deny(missing_docs)]
+//#![deny(missing_docs)]
 #![no_std]
 #![no_main]
 
@@ -9,6 +9,7 @@ use crate::{
 };
 extern crate alloc;
 
+pub mod utils;
 pub mod arch;
 pub mod entry;
 pub mod error;
@@ -17,7 +18,6 @@ mod panic;
 #[macro_use]
 pub mod console;
 pub mod devices;
-pub mod drivers;
 
 /// The main function of the operating system
 pub fn rust_main(_hart_id: usize, dev_info: impl DeviceInfo) -> ! {

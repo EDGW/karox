@@ -21,6 +21,36 @@ macro_rules! define_struct_copy_aligned {
             pub const fn from_value(value: $type) -> Self {
                 Self(value)
             }
+            pub const fn get_value(&self) -> $type{
+                self.0
+            }
+        }
+    };
+}
+
+/// Define as a struct that functions like a number
+#[macro_export]
+macro_rules! define_struct_num {
+    ($name: ident, $type: ty) => {
+        #[allow(missing_docs)]
+        #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+        #[repr(C)]
+        pub struct $name(pub $type);
+        impl core::ops::Deref for $name {
+            type Target = $type;
+            #[inline(always)]
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+        impl $name {
+            /// Create the packed type from the inner value
+            pub const fn from_value(value: $type) -> Self {
+                Self(value)
+            }
+            pub const fn get_value(&self) -> $type{
+                self.0
+            }
         }
     };
 }
@@ -44,6 +74,9 @@ macro_rules! define_struct_copy {
             /// Create the packed type from the inner value
             pub const fn from_value(value: $type) -> Self {
                 Self(value)
+            }
+            pub const fn get_value(&self) -> $type{
+                self.0
             }
         }
     };

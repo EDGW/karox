@@ -5,6 +5,8 @@ use crate::{
     devices::device_info::DeviceInfo,
 };
 
+pub mod mmio;
+pub mod serial;
 pub mod device_info;
 
 /// Initialize devices

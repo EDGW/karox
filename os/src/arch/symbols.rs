@@ -14,3 +14,10 @@ unsafe extern "C" {
     pub unsafe fn _ebss();
     pub unsafe fn _ekernel();
 }
+
+#[macro_export]
+macro_rules! phys_addr_from_kernel {
+    ($symbol: ident) => {
+        ($symbol as *const u8 as usize) - crate::arch::mm::config::KERNEL_SPACE_OFFSET
+    };
+}

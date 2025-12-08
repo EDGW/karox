@@ -1,14 +1,14 @@
 
 use bitflags::bitflags;
 
-use crate::drivers::{mmio::Register, serial::Uart};
+use crate::devices::{mmio::Register, serial::Uart};
 
-pub struct Ns16550a {
-    mmio: &'static mut Ns16550aReg,
+pub struct Uart16550 {
+    mmio: &'static mut Uart16550Reg,
 }
 
 #[repr(C, packed)]
-pub struct Ns16550aReg {
+pub struct Uart16550Reg {
     /// RBR(R) & THR(W) :0x00
     buffer: Register<u8>,
     /// IER(RW)         :0x01
@@ -25,19 +25,22 @@ pub struct Ns16550aReg {
     modem_stat: Register<u8>,
 }
 
-impl Ns16550a {
-    pub fn create(base: usize) -> Ns16550a {
-        Ns16550a {
-            mmio: unsafe { &mut *(base as *mut Ns16550aReg) },
+impl Uart16550 {
+    pub fn create(base: usize) -> Uart16550 {
+        Uart16550 {
+            mmio: unsafe { &mut *(base as *mut Uart16550Reg) },
         }
     }
 }
 
-impl Uart for Ns16550a {
+impl Uart for Uart16550 {
+    
     fn flush(&mut self) {}
+
     fn read(&mut self) -> Option<u8> {
         None
     }
+
     fn write(&mut self, word: u8) {
         self.mmio.buffer.write(word);
     }

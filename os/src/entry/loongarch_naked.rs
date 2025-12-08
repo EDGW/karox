@@ -49,17 +49,22 @@ unsafe extern "C" fn _start(hart_id: usize, dtb_addr: usize) {
         ",
         // Set up stack
         "
+
+            li.d        $t2, {k_offset}
+
             la.global   $sp, {boot_stack}
             csrrd       $t0, {cr_cpuid}
             li.d        $t1, {stack_size}
             addi.d      $t0, $t0, 0x1
             mul.d       $t0, $t0, $t1
             add.d       $sp, $sp, $t0
+            or          $sp, $sp, $t2
         ",
         // Jump
         "
             csrrd       $a0, {cr_cpuid} // arg0: hart_id
             la.global   $t0, {start}
+            or          $t0, $t0, $t2
             jirl        $zero,$t0,0
 
         ",
@@ -74,6 +79,7 @@ unsafe extern "C" fn _start(hart_id: usize, dtb_addr: usize) {
         cr_cpuid = const CR_CPUID,
         boot_stack = sym KERNEL_STACK,
         stack_size = const KERNEL_STACK_SIZE,
+        k_offset = const KERNEL_SPACE_OFFSET,
         start = sym start
 
     )

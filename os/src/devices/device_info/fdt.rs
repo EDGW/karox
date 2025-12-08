@@ -7,13 +7,10 @@ use bitflags::bitflags;
 use spin::{once::Once, rwlock::RwLock};
 
 use crate::{
-    arch::{endian::{BigEndian32, BigEndian64, EndianData}, mm::config::PAGE_SIZE},
-    devices::device_info::{
+    arch::{endian::{BigEndian32, BigEndian64, EndianData}, mm::config::PAGE_SIZE, symbols::{_ekernel, _skernel}}, devices::device_info::{
         DeviceInfo, MemoryAreaInfo,
-        device_tree::{DPRange, DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo},
-    },
-    error::MessageError,
-    mm::types::{MaybeOwned, MaybeOwnedStr},
+        device_tree::{DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo},
+    }, error::MessageError, mm::types::{MaybeOwned, MaybeOwnedStr}, phys_addr_from_kernel, utils::range::Range
 };
 
 /// Parser and holder for a Flattened Device Tree (FDT) blob.
@@ -387,7 +384,7 @@ impl DeviceInfo for FdtTree {
             .devices
             .get()
             .ok_or(FdtError::DeviceTreeError { err: DeviceTreeError::NotInitializedError })?
-            .mem_area)
+            .general_mem)
     }
 }
 
@@ -396,50 +393,62 @@ impl DeviceTree for FdtTree {
 
     /// Get the memory reservation map. The reserved memory block are aligned to a page
     /// 
+    /// **The reserved memory block are not promised to be not overlapped**
+    /// 
     /// Automatically add the fdt itself to the reservation block if it's not in the reservation block.
-    fn get_mem_rsv_map(&self) -> Result<Vec<DPRange<u64>>, FdtError>{
+    fn get_mem_rsv_map(&self) -> Result<Vec<Range<usize>>, FdtError>{
         let header = self.get_header();
         let mut ptr = self.get_pointer8(header.off_mem_rsvmap.value()) as *const ReservedMemoryEntry;
         let mut res = Vec::new();
 
         // self
-        let mut self_range = DPRange{
-            start: self.fdt_ptr as u64,
-            length: header.totalsize.value() as u64
+        let mut self_range = Range{
+            start: self.fdt_ptr as usize,
+            length: header.totalsize.value() as usize
         };
-        self_range.start -= self_range.start % PAGE_SIZE as u64;
-        let m2 = self_range.length % PAGE_SIZE as u64;
-        if m2 != 0{
-            self_range.length += PAGE_SIZE as u64 - m2;
+        self_range.start -= self_range.start % PAGE_SIZE;
+        let rem2 = self_range.length % PAGE_SIZE;
+        if rem2 != 0{
+            self_range.length += PAGE_SIZE - rem2;
+        }
+
+
+        let mut kernel_range = Range::from_points(
+            phys_addr_from_kernel!(_skernel),
+            phys_addr_from_kernel!(_ekernel)
+        );
+        kernel_range.start -= kernel_range.start % PAGE_SIZE;
+        let rem2 = kernel_range.length % PAGE_SIZE;
+        if rem2 != 0{
+            kernel_range.length += PAGE_SIZE - rem2;
         }
 
         // enumerate
         unsafe{
-            let block = *ptr;
-            let mut addr = block.addr.value();
-            let mut size = block.size.value();
+            let mut block = *ptr;
+            let mut addr = block.addr.value() as usize;
+            let mut size = block.size.value() as usize;
             while addr != 0 || size != 0{
-                ptr = ptr.add(1);
-            }
-            let m1 = block.addr.value() % PAGE_SIZE as u64;
-            let m2 = block.size.value() % PAGE_SIZE as u64;
-            addr -= m1;
-            if m2 != 0{
-                size += PAGE_SIZE as u64 - m2;
-            }
-            let range = DPRange::<u64>{
-                start: addr,
-                length: size
-            } - self_range;
-            for t in range{
-                if let Some(sec) = t{
-                    res.push(sec);
+                let m1 = addr % PAGE_SIZE;
+                let m2 = size % PAGE_SIZE;
+                addr -= m1;
+                if m2 != 0{
+                    size += PAGE_SIZE as usize - m2;
                 }
+                
+                res.push(Range{
+                    start: addr,
+                    length: size
+                });
+                
+                ptr = ptr.add(1);
+                block = *ptr;
+                addr = block.addr.value() as usize;
+                size = block.size.value() as usize;
             }
         }
-        if !self_range.empty(){
-            res.push(self_range);
-        }
+        res.push(self_range);
+        res.push(kernel_range);
 
         Ok(res)
     }

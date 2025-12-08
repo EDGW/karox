@@ -6,7 +6,7 @@ use spin::Mutex;
 
 use crate::{
     arch::SBITrait,
-    drivers::serial::{Uart, ns16550a::Ns16550a},
+    devices::serial::{Uart, uart16550::Uart16550},
 };
 
 static UART: Mutex<Option<Box<dyn Uart>>> = Mutex::<Option<Box<dyn Uart>>>::new(None);
@@ -25,6 +25,6 @@ impl SBITrait for SBITable {
     }
     fn init() {
         let mut guard = UART.lock();
-        *guard = Some(Box::new(Ns16550a::create(0x80000000_1fe001e0)));
+        *guard = Some(Box::new(Uart16550::create(0x80000000_1fe001e0)));
     }
 }
