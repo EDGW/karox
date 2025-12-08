@@ -1,4 +1,4 @@
-//! Karox Operating System
+//! karox Operating System
 //#![deny(missing_docs)]
 #![no_std]
 #![no_main]
