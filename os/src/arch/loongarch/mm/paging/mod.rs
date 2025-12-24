@@ -38,6 +38,10 @@ const MB: usize = 1024 * 1024;
 const KB: usize = 1024;
 
 pub struct LAPaging;
+impl LAPaging{
+    /// The number of the entries in a page table
+    pub const PTABLE_ENTRY_COUNT: usize = 512;
+}
 impl PagingMode for LAPaging{
     const PAGE_SIZE: usize = 4 * KB;
     const PAGE_WIDTH: usize = 12;

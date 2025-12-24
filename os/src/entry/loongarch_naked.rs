@@ -5,24 +5,21 @@ use crate::{
         CombinablePriority,
         mm::{
             KERNEL_STACK, MemAccessType,
-            config::{KERNEL_SPACE_OFFSET, KERNEL_STACK_SIZE, MMIO_OFFSET},
+            config::{KERNEL_STACK_SIZE, Paging},
         },
         reg::{CR_CPUID, CR_CRMD, CR_DMW0, CR_DMW1, CR_DMW2, CR_PRMD, CrDMWValue},
-    },
-    devices::device_info::FdtTree,
-    entry::shared::clear_bss,
-    rust_main,
+    }, devices::device_info::FdtTree, entry::shared::clear_bss, mm::PagingMode, rust_main
 };
 
 const BOOT_DMW0: CrDMWValue = CrDMWValue::create(
     CombinablePriority::PLV0,
     MemAccessType::STRONG_NONCACHE,
-    MMIO_OFFSET,
+    Paging::MMIO_OFFSET,
 );
 const BOOT_DMW1: CrDMWValue = CrDMWValue::create(
     CombinablePriority::PLV0,
     MemAccessType::CACHE,
-    KERNEL_SPACE_OFFSET,
+    Paging::KERNEL_OFFSET,
 );
 const BOOT_DMW2: CrDMWValue = CrDMWValue::create(CombinablePriority::PLV0, MemAccessType::CACHE, 0);
 
@@ -78,7 +75,7 @@ unsafe extern "C" fn _start(hart_id: usize, dtb_addr: usize) {
         cr_cpuid = const CR_CPUID,
         boot_stack = sym KERNEL_STACK,
         stack_size = const KERNEL_STACK_SIZE,
-        k_offset = const KERNEL_SPACE_OFFSET,
+        k_offset = const Paging::KERNEL_OFFSET,
         start = sym start
 
     )

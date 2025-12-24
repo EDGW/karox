@@ -13,19 +13,6 @@ pub const KERNEL_STACK_SHIFT: usize = 20 + 3; // 8MiB
 /// The Paging strategy used
 pub type Paging = LAPaging;
 
-/// The size of a normal page
-pub const PAGE_SIZE: usize = 0x1000;
-/// The size of a normal page represented in bit width
-pub const PAGE_WIDTH: usize = 12;
-
-/// The number of the entries in a page table
-pub const PTABLE_ENTRY_COUNT: usize = 512;
-
 /// Max HARTs Supported
 pub const MAX_HARTS: usize = 16;
 
-/// The kernel space offset
-pub const KERNEL_SPACE_OFFSET: usize = 0x9000_0000_0000_0000;
-
-/// The MMIO space offset
-pub const MMIO_OFFSET: usize = 0x8000_0000_0000_0000;
