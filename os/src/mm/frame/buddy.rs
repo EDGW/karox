@@ -1,15 +1,18 @@
 //! Buddy Frame Allocator
-//! 
+//!
 //! This module packed a buddy frame allocator.
 
+#![allow(unused)]
+
 use crate::{
-    arch::mm::paging::PageNum, devices::device_info::MemoryAreaInfo, mm::frame::FrameAllocator,
+    arch::mm::paging::PageNum, devices::device_info::MemoryAreaInfo, kserial_println, mm::frame::FrameAllocator
 };
 
 /// Maximum order for the buddy system.
 pub const MAX_ORDER: usize = 32;
 
 /// Buddy frame allocator implementation.
+#[allow(unused)]
 pub struct BuddyFrameAllocator {
     inner: buddy_system_allocator::FrameAllocator<MAX_ORDER>,
 }
@@ -35,5 +38,4 @@ impl FrameAllocator for BuddyFrameAllocator {
         let end = PageNum::from_addr(general_mem.start + general_mem.length);
         self.inner.add_frame(start.get_value(), end.get_value());
     }
-    fn init(&mut self) {}
 }

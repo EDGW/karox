@@ -54,11 +54,12 @@ use crate::{
     kserial_println,
     mm::{
         PagingMode,
-        frame::{FRAME_ALLOC, FrameAllocator, ManagedFrames},
+        frame::{FRAME_ALLOC, ManagedFrames},
     },
     phys_addr_from_kernel,
     utils::{num::AlignableTo, range::Range},
 };
+use alloc::vec::Vec;
 use core::slice::Iter;
 use spin::once::Once;
 
@@ -67,7 +68,7 @@ const MB: usize = 1024 * 1024;
 const KB: usize = 1024;
 
 /// SV39 Paging strategy set, implementing [PagingMode].
-/// 
+///
 /// This struct defines constants and methods for the SV39 paging strategy, including page sizes,
 /// address widths, and memory layout.
 pub struct SV39Paging;
@@ -98,12 +99,12 @@ impl SV39Paging {
 }
 
 /// Root page table of the kernel.
-/// 
+///
 /// The upper 256 entries are marked as global and shared by all page tables.
 pub static KERNEL_ROOT_TABLE: Once<ManagedFrames> = Once::new();
 
 /// Level-1 page tables used to map the MMIO space.
-/// 
+///
 /// [SV39Paging::MMIO_PAGE_COUNT] tables in total.
 pub static MMIO_TABLES: Once<ManagedFrames> = Once::new();
 
@@ -128,18 +129,27 @@ pub fn init_paging() {
     setup_kernel_ptable();
 }
 
+/// Converts the frames given in [ManagedFrames] to a page table vector
+unsafe fn convert_to_ptable_vec<'a>(frames: &'a ManagedFrames) -> Vec<&'a mut PageTableValue> {
+    frames
+        .iter()
+        .map(|ppn| unsafe {
+            &mut *(ppn.physical_to_kernel().get_base_addr() as *mut PageTableValue)
+        })
+        .collect()
+}
+
 /// Sets up the kernel page table.
 fn setup_kernel_ptable() {
     // 1. Allocate space for the root page table and MMIO page tables
-    let root_table_managed = FRAME_ALLOC.lock().alloc_managed(2).unwrap_or_else(|e| {
+    let root_table_managed = FRAME_ALLOC.alloc_managed(2).unwrap_or_else(|e| {
         panic!(
             "Failed to allocate space for the kernel root page table: {:?}",
             e
         )
     });
-    let root_table = unsafe { root_table_managed.get_ref::<PageTableValue>() };
+    let root_table = unsafe { root_table_managed.get_ref::<PageTableValue>(0) };
     let mmio_tables_managed = FRAME_ALLOC
-        .lock()
         .alloc_managed(SV39Paging::MMIO_PAGE_COUNT)
         .unwrap_or_else(|e| {
             panic!(
@@ -147,10 +157,10 @@ fn setup_kernel_ptable() {
                 e
             )
         });
-    let mmio_tables =
-        unsafe { mmio_tables_managed.get_ref::<[PageTableValue; SV39Paging::MMIO_PAGE_COUNT]>() };
+    let mut mmio_tables: Vec<&mut PageTableValue> =
+        unsafe { convert_to_ptable_vec(&mmio_tables_managed) };
 
-    // 2. Initialize page table entries    
+    // 2. Initialize page table entries
     // [0, 255): invalid (user space not mapped here)
     for i in 0..256 {
         root_table[i] = PageTableEntry::create_invalid();
@@ -173,7 +183,7 @@ fn setup_kernel_ptable() {
     let kernel_page_index = phys_addr_from_kernel!(_skernel) >> SV39Paging::PG_WIDTH_L0;
     let kernel_tables = create_kbin_space_subtable();
     root_table[256 + kernel_page_index] =
-        PageTableEntry::create(kernel_tables.get_ppn(), pdir_flags);
+        PageTableEntry::create(kernel_tables.get_ppn(0), pdir_flags);
 
     // MMIO mapping
     for i in 0..SV39Paging::MMIO_PAGE_COUNT {
@@ -188,13 +198,13 @@ fn setup_kernel_ptable() {
     CrSatp::set_value(CrSatpValue::create(
         CrSatpModes::SV39,
         0,
-        root_table_managed.get_ppn(),
+        root_table_managed.get_ppn(0),
     ));
 
     kserial_println!(
         "Kernel page table initialized at {:#x}(ppn {:#x})",
-        unsafe { root_table_managed.get_kernel_ptr() } as *const u8 as usize,
-        root_table_managed.get_ppn().get_value()
+        unsafe { root_table_managed.get_kernel_ptr(0) } as *const u8 as usize,
+        root_table_managed.get_ppn(0).get_value()
     );
 
     // Preserve page table lifetime
@@ -291,10 +301,9 @@ fn create_kbin_space_subtable() -> ManagedFrames {
 
     // allocate frames
     let frames_managed = FRAME_ALLOC
-        .lock()
         .alloc_managed(frame_cnt)
         .unwrap_or_else(|e| panic!("Failed to allocate space for kernel page table: {:?}", e));
-    let frames = unsafe { frames_managed.get_as_arr::<PageTableValue>(frame_cnt) };
+    let mut frames = unsafe { convert_to_ptable_vec(&frames_managed) };
 
     // base flags for non-directory entries
     let baseflags = PageTableFlags::DIRTY
@@ -338,8 +347,7 @@ fn create_kbin_space_subtable() -> ManagedFrames {
         dir_flags: PageTableFlags,
         normal_flags: PageTableFlags,
     ) {
-        let frames =
-            unsafe { frames_managed.get_as_arr::<PageTableValue>(frames_managed.get_count()) };
+        let mut frames = unsafe { convert_to_ptable_vec(&frames_managed) };
 
         let entry_id = (addr_start - kpage_start) >> SV39Paging::PG_WIDTH_L1;
 
@@ -360,7 +368,7 @@ fn create_kbin_space_subtable() -> ManagedFrames {
         } else {
             // create a new page
             frames[0][entry_id] =
-                PageTableEntry::create(frames_managed.get_ppn() + *frame_idx_counter, dir_flags);
+                PageTableEntry::create(frames_managed.get_ppn(*frame_idx_counter), dir_flags);
             frame_idx_recorder[entry_id] = *frame_idx_counter as u16;
             if idx1 != 0 {
                 fill_linear_ptable(
