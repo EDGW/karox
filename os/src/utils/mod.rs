@@ -1,3 +1,4 @@
-//! This module defines some utilities
+//! This module provides some utilities
 
+pub mod num;
 pub mod range;

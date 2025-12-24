@@ -1,26 +1,39 @@
-use alloc::vec::Vec;
+//! Buddy Frame Allocator
+//! 
+//! This module packed a buddy frame allocator.
 
 use crate::{
-    devices::device_info::MemoryAreaInfo,
-    mm::frame::{FrameAllocator, PhysicalPageNum},
+    arch::mm::paging::PageNum, devices::device_info::MemoryAreaInfo, mm::frame::FrameAllocator,
 };
 
-pub type BuddyFrameAllocator = buddy_system_allocator::FrameAllocator<MAX_ORDER>;
-
+/// Maximum order for the buddy system.
 pub const MAX_ORDER: usize = 32;
 
-impl FrameAllocator for BuddyFrameAllocator {
-    fn alloc(&mut self, count: usize) -> Option<PhysicalPageNum> {
-        self.alloc(count).map(PhysicalPageNum::from_value)
-    }
-    fn decalloc(&mut self, ppn: PhysicalPageNum, count: usize) {
-        self.dealloc(ppn.get_value(), count);
-    }
-    fn init(&mut self, general_mem: &Vec<MemoryAreaInfo>) {
-        for mem_area in general_mem {
-            let start = PhysicalPageNum::from_addr(mem_area.start);
-            let end = PhysicalPageNum::from_addr(mem_area.start + mem_area.length);
-            self.add_frame(start.get_value(), end.get_value());
+/// Buddy frame allocator implementation.
+pub struct BuddyFrameAllocator {
+    inner: buddy_system_allocator::FrameAllocator<MAX_ORDER>,
+}
+
+impl BuddyFrameAllocator {
+    /// Creates a new buddy frame allocator.
+    pub const fn new() -> Self {
+        BuddyFrameAllocator {
+            inner: buddy_system_allocator::FrameAllocator::new(),
         }
     }
+}
+
+impl FrameAllocator for BuddyFrameAllocator {
+    unsafe fn try_alloc(&mut self, count: usize) -> Option<PageNum> {
+        self.inner.alloc(count).map(PageNum::from_value)
+    }
+    unsafe fn decalloc(&mut self, ppn: PageNum, count: usize) {
+        self.inner.dealloc(ppn.get_value(), count);
+    }
+    fn add_frame(&mut self, general_mem: MemoryAreaInfo) {
+        let start = PageNum::from_addr(general_mem.start);
+        let end = PageNum::from_addr(general_mem.start + general_mem.length);
+        self.inner.add_frame(start.get_value(), end.get_value());
+    }
+    fn init(&mut self) {}
 }

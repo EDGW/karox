@@ -17,7 +17,8 @@ unsafe extern "C" {
 
 #[macro_export]
 macro_rules! phys_addr_from_kernel {
-    ($symbol: ident) => {
-        ($symbol as *const u8 as usize) - crate::arch::mm::config::KERNEL_SPACE_OFFSET
-    };
+    ($symbol: expr) => {{
+        use crate::mm::PagingMode;
+        ($symbol as *const u8 as usize) - crate::arch::mm::config::Paging::KERNEL_OFFSET
+    }};
 }

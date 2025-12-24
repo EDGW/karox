@@ -1,38 +1,34 @@
-//! This module defines a [Range<T>] struct for convenience
+//! This module provides a `Range<T>` struct
 
 use core::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     ops::{Add, Sub},
 };
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-/// C-style aligned range structure for representing start/length numerical pairs.
-///
-/// This struct models a **left-closed, right-open interval** `[start, start + length)`, where:
-/// - `start` is the inclusive left boundary of the range;
-/// - `start + length` is the exclusive right boundary of the range.
-///
-/// The `#[repr(C)]` attribute ensures C-compatible memory layout for interoperability with C code.
+/// Represents a numerical range as a left-closed, right-open interval `[start, start + length)`.
+/// **This struct is C-compatible.**
 pub struct Range<T: Debug> {
-    /// Start address (or index) of the range.
+    /// Start of the range.
     pub start: T,
-    /// Length (size) of the range.
+    /// Length of the range.
     pub length: T,
 }
 
 impl<T: Debug> Range<T> {
-
+    /// Creates a range from a start and end point.
     pub fn from_points(start: T, end: T) -> Range<T>
-    where T: Sub<Output = T> + Copy
+    where
+        T: Sub<Output = T> + Copy,
     {
-        Range{
-            start: start,
-            length: end - start
+        Range {
+            start,
+            length: end - start,
         }
     }
 
-    /// Determines if this range overlaps with another range.
+    /// Checks if this range overlaps with another range.
     ///
     /// Overlap rules for left-closed, right-open intervals (`[start, start + length)`):
     /// - If either range is empty (length = 0), returns `false` immediately (no overlap possible).
@@ -74,14 +70,14 @@ impl<T: Debug> Range<T> {
 
 impl<T: Debug + Copy + Add<Output = T> + Sub<Output = T> + Ord + PartialEq> Sub for Range<T> {
     type Output = [Option<Range<T>>; 2];
-    
-    /// Subtracts the `rhs` range from `self` and returns up to two non-overlapping remaining segments.
+
+    /// Subtracts another range from this range, returning the remaining segments.
     /// The output is a fixed-size array `[Option<Range<T>>; 2]` where:
     /// - `[Some(left), Some(right)]`: Self fully contains rhs (split into two non-overlapping segments)
     /// - `[Some(remaining), None]`: Partial overlap (only one valid segment remains) or no overlap (returns original self)
     /// - `[None, None]`: Self is fully contained within rhs (no remaining range) or self is empty
     /// ### Notes
-    /// - This function is safe onlu when `T` is an unsigned value.
+    /// - This function is safe only when `T` is an unsigned value.
     fn sub(self, rhs: Self) -> Self::Output{
         let self_left = self.start;
         let self_right = self.start + self.length;
@@ -138,5 +134,12 @@ impl<T: Debug + Copy + Add<Output = T> + Sub<Output = T> + Ord + PartialEq> Sub 
         } else {
             [None, None]
         }
+    }
+}
+
+impl Display for Range<usize> {
+    /// Formats the range as a hexadecimal string.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_fmt(format_args!("[{:#x},{:#x})", self.start, self.start + self.length))
     }
 }

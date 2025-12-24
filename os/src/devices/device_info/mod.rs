@@ -4,16 +4,9 @@ mod fdt;
 use alloc::vec::Vec;
 pub use fdt::FdtTree;
 
-use crate::error::MessageError;
+use crate::{error::MessageError, utils::range::Range};
 
-/// A section of the general memory
-#[derive(Debug)]
-pub struct MemoryAreaInfo {
-    /// Starting address
-    pub start: usize,
-    /// Length
-    pub length: usize,
-}
+pub type MemoryAreaInfo = Range<usize>;
 
 /// An abstraction to describe the device struct of the system
 pub trait DeviceInfo {

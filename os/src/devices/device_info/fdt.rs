@@ -7,11 +7,20 @@ use bitflags::bitflags;
 use spin::{once::Once, rwlock::RwLock};
 
 use crate::{
-    arch::{endian::{BigEndian32, BigEndian64, EndianData}, mm::config::PAGE_SIZE, symbols::{_ekernel, _skernel}}, devices::device_info::{
+    arch::{
+        endian::{BigEndian32, BigEndian64, EndianData},
+        mm::config::Paging,
+    },
+    devices::device_info::{
         DeviceInfo, MemoryAreaInfo,
         device_tree::{DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo},
-    }, error::MessageError, mm::types::{MaybeOwned, MaybeOwnedStr}, phys_addr_from_kernel, utils::range::Range
+    },
+    error::MessageError,
+    mm::PagingMode,
+    utils::{num::AlignableTo, range::Range},
 };
+
+const PAGE_SIZE: usize = Paging::PAGE_SIZE;
 
 /// Parser and holder for a Flattened Device Tree (FDT) blob.
 ///
@@ -19,7 +28,7 @@ use crate::{
 /// in-memory [DeviceNode] tree and extracted device information.
 pub struct FdtTree {
     /// Raw pointer to the FDT blob interpreted as big-endian 32-bit words.
-    fdt_ptr: *const BigEndian32,
+    pub fdt_ptr: *const BigEndian32,
     /// Root node parsed from the FDT (protected by an RwLock for concurrent access).
     pub fdt_node: RwLock<Option<DeviceNode>>,
     /// Lazily-initialized extracted device info (memory regions, devices, etc.).
@@ -47,7 +56,7 @@ pub struct FdtHeader {
 /// Flattened Reserved Memory Entry
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct ReservedMemoryEntry{
+pub struct ReservedMemoryEntry {
     pub addr: BigEndian64,
     pub size: BigEndian64,
 }
@@ -272,8 +281,8 @@ impl FdtTree {
             read(ptr);
             let len = read(ptr);
             let name_offset = read(ptr);
-            let name = MaybeOwnedStr::Static(self.get_string(name_offset)?);
-            let data = MaybeOwned::<[u8]>::Static(readbytes_aligned(ptr, len));
+            let name = Box::from(self.get_string(name_offset)?);
+            let data = Box::from(readbytes_aligned(ptr, len));
             res.push(DeviceProp {
                 prop_name: name,
                 raw_data: data,
@@ -302,12 +311,12 @@ impl FdtTree {
             }
         }
         let props = self.read_props(ptr)?;
-        let mut subnodes = Vec::<Box<DeviceNode>>::new();
+        let mut subnodes = Vec::<DeviceNode>::new();
         loop {
             skip(ptr);
             let nodetype = peek(ptr);
             if nodetype == FdtNodeType::FDT_BEGIN_NODE.bits {
-                subnodes.push(Box::new(self.read_node(ptr)?));
+                subnodes.push(self.read_node(ptr)?);
             } else if nodetype == FdtNodeType::FDT_END_NODE.bits {
                 read(ptr);
                 break;
@@ -321,8 +330,8 @@ impl FdtTree {
         }
 
         Ok(DeviceNode {
-            node_name: MaybeOwnedStr::Static(node_name),
-            unit_addr: MaybeOwnedStr::Static(unit_addr),
+            node_name: Box::from(node_name),
+            unit_addr: Box::from(unit_addr),
             props: props,
             subnodes: subnodes,
         })
@@ -330,7 +339,9 @@ impl FdtTree {
 
     /// Parse the entire structure block and store the root [DeviceNode].
     ///
-    /// After calling this the in-memory node tree is available via [Self::fdt_node].
+    /// After calling this, the in-memory node tree is available via [Self::fdt_node].
+    ///
+    /// All strings and byte-array data will be **copied** to [Self::fdt_node], and the raw data of fdt can be safely wiped.
     pub fn load_nodes(&self) -> Result<(), FdtError> {
         let mut ptr = self.get_pointer32(self.get_header().off_dt_struct.value());
         let node = self.read_node(&mut ptr)?;
@@ -372,8 +383,7 @@ impl DeviceInfo for FdtTree {
     fn init(&self) -> Result<(), FdtError> {
         self.validate()?;
         self.load_nodes()?;
-        let dev = self
-            .init_devices()?;
+        let dev = self.init_devices()?;
         self.devices.call_once(|| dev);
         Ok(())
     }
@@ -383,7 +393,9 @@ impl DeviceInfo for FdtTree {
         Ok(&self
             .devices
             .get()
-            .ok_or(FdtError::DeviceTreeError { err: DeviceTreeError::NotInitializedError })?
+            .ok_or(FdtError::DeviceTreeError {
+                err: DeviceTreeError::NotInitializedError,
+            })?
             .general_mem)
     }
 }
@@ -392,55 +404,40 @@ impl DeviceTree for FdtTree {
     type TDataType = BigEndian32;
 
     /// Get the memory reservation map. The reserved memory block are aligned to a page
-    /// 
+    ///
     /// **The reserved memory block are not promised to be not overlapped**
-    /// 
+    ///
     /// Automatically add the fdt itself to the reservation block if it's not in the reservation block.
-    fn get_mem_rsv_map(&self) -> Result<Vec<Range<usize>>, FdtError>{
+    fn get_mem_rsv_map(&self) -> Result<Vec<Range<usize>>, FdtError> {
         let header = self.get_header();
-        let mut ptr = self.get_pointer8(header.off_mem_rsvmap.value()) as *const ReservedMemoryEntry;
+        let mut ptr =
+            self.get_pointer8(header.off_mem_rsvmap.value()) as *const ReservedMemoryEntry;
         let mut res = Vec::new();
 
         // self
-        let mut self_range = Range{
-            start: self.fdt_ptr as usize,
-            length: header.totalsize.value() as usize
+        let self_range = Range {
+            start: (self.fdt_ptr as usize).align_down(PAGE_SIZE),
+            length: (header.totalsize.value() as usize).align_up(PAGE_SIZE),
         };
-        self_range.start -= self_range.start % PAGE_SIZE;
-        let rem2 = self_range.length % PAGE_SIZE;
-        if rem2 != 0{
-            self_range.length += PAGE_SIZE - rem2;
-        }
-
-
-        let mut kernel_range = Range::from_points(
-            phys_addr_from_kernel!(_skernel),
-            phys_addr_from_kernel!(_ekernel)
-        );
-        kernel_range.start -= kernel_range.start % PAGE_SIZE;
-        let rem2 = kernel_range.length % PAGE_SIZE;
-        if rem2 != 0{
-            kernel_range.length += PAGE_SIZE - rem2;
-        }
 
         // enumerate
-        unsafe{
+        unsafe {
             let mut block = *ptr;
             let mut addr = block.addr.value() as usize;
             let mut size = block.size.value() as usize;
-            while addr != 0 || size != 0{
+            while addr != 0 || size != 0 {
                 let m1 = addr % PAGE_SIZE;
                 let m2 = size % PAGE_SIZE;
                 addr -= m1;
-                if m2 != 0{
+                if m2 != 0 {
                     size += PAGE_SIZE as usize - m2;
                 }
-                
-                res.push(Range{
+
+                res.push(Range {
                     start: addr,
-                    length: size
+                    length: size,
                 });
-                
+
                 ptr = ptr.add(1);
                 block = *ptr;
                 addr = block.addr.value() as usize;
@@ -448,7 +445,6 @@ impl DeviceTree for FdtTree {
             }
         }
         res.push(self_range);
-        res.push(kernel_range);
 
         Ok(res)
     }
@@ -457,7 +453,7 @@ impl DeviceTree for FdtTree {
         FdtError::DeviceTreeError { err }
     }
 
-    fn get_root_node_lock(& self) -> Result<&RwLock<Option<DeviceNode>>, FdtError> {
+    fn get_root_node_lock(&self) -> Result<&RwLock<Option<DeviceNode>>, FdtError> {
         Ok(&self.fdt_node)
     }
 }

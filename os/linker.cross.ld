@@ -10,6 +10,7 @@ SECTIONS
 
         . = ALIGN(4K);
         *(.text .text.*)
+        . = ALIGN(4K);
         _etext = .;
     } > VIRT AT> RAM
 
@@ -17,6 +18,7 @@ SECTIONS
         _srodata = .;
         *(.rodata .rodata.*)
         *(.srodata .srodata.*)
+        . = ALIGN(4K);
         _erodata = .;
     } > VIRT AT> RAM
 
@@ -25,6 +27,7 @@ SECTIONS
         *(.data .data.*)
         *(.sdata .sdata.*)
         *(.got)
+        . = ALIGN(4K);
         _edata = .;
     } > VIRT AT> RAM
 
@@ -35,6 +38,7 @@ SECTIONS
         _kbss = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)
+        . = ALIGN(4K);
         _ebss = .;
     } > VIRT AT> RAM
 

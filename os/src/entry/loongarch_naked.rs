@@ -99,6 +99,8 @@ global_asm! {
     "
 }
 
+fn copy_dtb() {}
+
 fn start(hart_id: usize) -> ! {
     clear_bss();
     let dev_tree = FdtTree::from_ptr(_dtb as *const u8);

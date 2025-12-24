@@ -1,14 +1,19 @@
-use core::{any::type_name, fmt::Debug};
+use core::{any::type_name, fmt::Debug, usize};
 
 use alloc::{boxed::Box, slice, vec, vec::Vec};
 use spin::rwlock::RwLock;
 
 use crate::{
-    arch::endian::EndianData,
+    arch::{
+        endian::EndianData,
+        mm::config::Paging,
+        symbols::{_ekernel, _skernel},
+    },
     devices::device_info::{DeviceInfo, MemoryAreaInfo},
     error::MessageError,
-    mm::types::{MaybeOwned, MaybeOwnedBytes, MaybeOwnedStr},
-    utils::range::Range,
+    mm::PagingMode,
+    phys_addr_from_kernel,
+    utils::{num::AlignableTo, range::Range},
 };
 
 /// Cell width descriptor
@@ -27,11 +32,11 @@ pub struct RegCellWidth {
 #[derive(Debug)]
 pub struct DeviceNode {
     /// Node name
-    pub node_name: MaybeOwnedStr,
+    pub node_name: Box<str>,
     /// Unit address string parsed from the node, text after `@`.
-    pub unit_addr: MaybeOwnedStr,
+    pub unit_addr: Box<str>,
     /// Child device nodes.
-    pub subnodes: Vec<Box<DeviceNode>>,
+    pub subnodes: Vec<DeviceNode>,
     /// Properties attached to this node.
     pub props: Vec<DeviceProp>,
 }
@@ -47,20 +52,22 @@ impl DeviceNode {
         &self,
         size: &RegCellWidth,
     ) -> Result<Vec<Range<usize>>, DeviceTreeError> {
-        let raw_array = self.get_array::<DType>(MaybeOwned::Static("reg"))?;
+        // Get raw array
+        let raw_array = self.get_array::<DType>("reg")?;
         let cell_width = size.address + size.size;
         let raw_length = raw_array.len();
         if raw_length % cell_width != 0 {
             return Err(DeviceTreeError::InvalidPropFormat {
-                prop_name: MaybeOwned::Static("reg"),
+                prop_name: Box::from("reg"),
                 err: InvalidPropFormatError::ArrayLengthError {
-                    array_type: type_name::<[DType]>(),
+                    array_type: Box::from(type_name::<[DType]>()),
                     len: raw_length,
                     supposed_fact: cell_width,
                 },
             });
         }
 
+        // Split array
         let data_cnt = raw_length / cell_width;
         let mut res = Vec::new();
         for i in 0..data_cnt {
@@ -88,34 +95,31 @@ impl DeviceNode {
     /// Return a typed pointer to the start of the property's raw data.
     pub fn get_array_as_ptr<DType: Copy>(
         &self,
-        prop_name: MaybeOwnedStr,
+        prop_name: &str,
     ) -> Result<&DType, DeviceTreeError> {
         let p = self
-            .find_prop(prop_name.as_ref())
+            .find_prop(prop_name)
             .ok_or(DeviceTreeError::PropertyNotFound {
-                prop_name: prop_name,
+                prop_name: Box::from(prop_name),
             })?;
         Ok(unsafe { &*((&p.raw_data[0]) as *const u8 as *const DType) })
     }
 
     /// Interpret the property's raw bytes as an array of `DType` entries, ignoring exceeding not-aligned bytes.
-    pub fn get_array<DType: Copy>(
-        &self,
-        prop_name: MaybeOwnedStr,
-    ) -> Result<&[DType], DeviceTreeError> {
+    pub fn get_array<DType: Copy>(&self, prop_name: &str) -> Result<&[DType], DeviceTreeError> {
         let prop = self
-            .find_prop(prop_name.as_ref())
+            .find_prop(prop_name)
             .ok_or(DeviceTreeError::PropertyNotFound {
-                prop_name: prop_name,
+                prop_name: Box::from(prop_name),
             })?;
         let raw_length = prop.raw_data.len();
 
         let cell_width = size_of::<DType>();
         if raw_length % cell_width != 0 {
             return Err(DeviceTreeError::InvalidPropFormat {
-                prop_name: MaybeOwned::Static("reg"),
+                prop_name: Box::from(prop_name),
                 err: InvalidPropFormatError::ArrayLengthError {
-                    array_type: type_name::<[u8]>(),
+                    array_type: Box::from(type_name::<[u8]>()),
                     len: raw_length,
                     supposed_fact: cell_width,
                 },
@@ -132,11 +136,13 @@ impl DeviceNode {
     }
 
     /// Read a value and cast it to the specific type from the property's raw bytes.
-    pub fn get_value_as<TVal: Copy>(&self, name: MaybeOwnedStr) -> Result<TVal, DeviceTreeError> {
+    pub fn get_value_as<TVal: Copy>(&self, name: &str) -> Result<TVal, DeviceTreeError> {
         unsafe {
             let res = *(self
-                .find_prop(name.as_ref())
-                .ok_or(DeviceTreeError::PropertyNotFound { prop_name: name })?
+                .find_prop(name)
+                .ok_or(DeviceTreeError::PropertyNotFound {
+                    prop_name: Box::from(name),
+                })?
                 .raw_data
                 .as_ptr() as *const TVal);
             Ok(res)
@@ -153,7 +159,7 @@ impl DeviceNode {
         let mut res = [None; T];
         for prop in &self.props {
             let mut iter = name.iter();
-            if let Some(idx) = iter.position(|&s| prop.prop_name.eq(s)) {
+            if let Some(idx) = iter.position(|&s| prop.prop_name.as_ref().eq(s)) {
                 res[idx] = Some(prop);
             }
         }
@@ -164,8 +170,8 @@ impl DeviceNode {
     pub fn find_nodes(&self, name: &str) -> Vec<&DeviceNode> {
         let mut res = Vec::<&DeviceNode>::new();
         for node in &self.subnodes {
-            if node.node_name.eq(name) {
-                res.push(node.as_ref());
+            if node.node_name.as_ref().eq(name) {
+                res.push(node);
             }
         }
         res
@@ -176,9 +182,9 @@ impl DeviceNode {
 #[derive(Debug)]
 pub struct DeviceProp {
     /// Property name
-    pub prop_name: MaybeOwnedStr,
+    pub prop_name: Box<str>,
     /// Raw bytes of the property data
-    pub raw_data: MaybeOwnedBytes,
+    pub raw_data: Box<[u8]>,
 }
 
 /// Validate whether the cell width is supported by this parser
@@ -214,20 +220,14 @@ pub trait DeviceTree: DeviceInfo {
     /// parsed tree.
     fn get_root_node_lock(&self) -> Result<&RwLock<Option<DeviceNode>>, Self::TError>;
 
-    /// Read `#address-cells` and `#size-cells` from the root node
-    fn get_cell_size(&self) -> Result<RegCellWidth, Self::TError> {
-        let guard = self.get_root_node_lock()?.read();
-        let root_node = guard
-            .as_ref()
-            .ok_or(DeviceTreeError::NotInitializedError)
-            .map_err(Self::wrap_error)?;
-
-        let addr_cells = root_node
-            .get_value_as::<Self::TDataType>(MaybeOwned::Static("#address-cells"))
+    /// Read `#address-cells` and `#size-cells` from a specific node
+    fn get_cell_size(&self, node: &DeviceNode) -> Result<RegCellWidth, Self::TError> {
+        let addr_cells = node
+            .get_value_as::<Self::TDataType>("#address-cells")
             .map_err(Self::wrap_error)?
             .value();
-        let size_cells = root_node
-            .get_value_as::<Self::TDataType>(MaybeOwned::Static("#size-cells"))
+        let size_cells = node
+            .get_value_as::<Self::TDataType>("#size-cells")
             .map_err(Self::wrap_error)?
             .value();
 
@@ -235,6 +235,16 @@ pub trait DeviceTree: DeviceInfo {
             address: addr_cells as usize,
             size: size_cells as usize,
         })
+    }
+
+    /// Read `#address-cells` and `#size-cells` from the root node
+    fn get_root_cell_size(&self) -> Result<RegCellWidth, Self::TError> {
+        let guard = self.get_root_node_lock()?.read();
+        let root_node = guard
+            .as_ref()
+            .ok_or(DeviceTreeError::NotInitializedError)
+            .map_err(Self::wrap_error)?;
+        self.get_cell_size(root_node)
     }
 
     /// Remove the reserved areas from a memory area given in a [DeviceNode], and add it to the result list representing all general memory areas.
@@ -270,8 +280,8 @@ pub trait DeviceTree: DeviceInfo {
                 }
                 for item in result {
                     res.push(MemoryAreaInfo {
-                        start: item.start as usize,
-                        length: item.length as usize,
+                        start: item.start,
+                        length: item.length,
                     });
                 }
             });
@@ -284,13 +294,34 @@ pub trait DeviceTree: DeviceInfo {
         root_node: &DeviceNode,
         cell_sz: &RegCellWidth,
     ) -> Result<Vec<MemoryAreaInfo>, Self::TError> {
-        let rsv = self.get_mem_rsv_map()?;
+        let mut rsvs = self.get_mem_rsv_map()?;
+
+        // add memory reservation spaces given in nodes
+        for rsv_node_tree in root_node.find_nodes("reserved-memory") {
+            let cell_sz = self.get_cell_size(rsv_node_tree)?;
+            for rsv_node in &rsv_node_tree.subnodes {
+                let reg = rsv_node.get_reg::<Self::TDataType>(&cell_sz);
+                if let Ok(ranges) = reg {
+                    for r in ranges {
+                        rsvs.push(r);
+                    }
+                }
+            }
+        }
+
+        // add kernel page
+        rsvs.push(Range::from_points(
+            phys_addr_from_kernel!(_skernel).align_down(Paging::PAGE_SIZE),
+            phys_addr_from_kernel!(_ekernel).align_up(Paging::PAGE_SIZE),
+        ));
+
+        // calculate memory area
         let mem_area =
             root_node
                 .find_nodes("memory")
                 .iter()
                 .try_fold(vec![], |mut acc, &val| {
-                    self.add_mem_to_general(&mut acc, val, &rsv, cell_sz)?;
+                    self.add_mem_to_general(&mut acc, val, &rsvs, cell_sz)?;
                     Ok(acc)
                 })?;
         Ok(mem_area)
@@ -311,7 +342,7 @@ pub trait DeviceTree: DeviceInfo {
             .ok_or(DeviceTreeError::NotInitializedError)
             .map_err(Self::wrap_error)?;
 
-        let cell_sz = self.get_cell_size()?;
+        let cell_sz = self.get_root_cell_size()?;
         validate_cell_size(&cell_sz).map_err(Self::wrap_error)?;
 
         let mem_area = self.calc_mem_area(root_node, &cell_sz)?;
@@ -326,9 +357,9 @@ pub trait DeviceTree: DeviceInfo {
 #[derive(Debug)]
 pub enum DeviceTreeError {
     /// Requested property was not found on the node.
-    PropertyNotFound { prop_name: MaybeOwnedStr },
+    PropertyNotFound { prop_name: Box<str> },
     /// Requested child node was not found.
-    NodeNotFound { node_name: MaybeOwnedStr },
+    NodeNotFound { node_name: Box<str> },
     /// The `#address-cells`/`#size-cells` value is not supported.
     UnsupportedAddressType {
         address_cells: usize,
@@ -336,7 +367,7 @@ pub enum DeviceTreeError {
     },
     /// A property had an invalid format when parsed.
     InvalidPropFormat {
-        prop_name: MaybeOwnedStr,
+        prop_name: Box<str>,
         err: InvalidPropFormatError,
     },
     /// Device tree parsing or initialization has not been performed yet.
@@ -349,7 +380,7 @@ pub enum InvalidPropFormatError {
     /// The parsed array length did not match the expected count.
     ArrayLengthError {
         /// Human readable element type name (e.g. "u32").
-        array_type: &'static str,
+        array_type: Box<str>,
         /// Actual element count found.
         len: usize,
         /// Expected/factor used when validating length.
