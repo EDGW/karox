@@ -1,5 +1,7 @@
 //! Arch-spec Memory Management Configurations
 
+use crate::arch::mm::paging::LAPaging;
+
 /// Fixed Kernel Heap Size
 pub const KERNEL_HEAP_SIZE: usize = 128 * 0x10_0000; // 128MiB
 
@@ -7,6 +9,9 @@ pub const KERNEL_HEAP_SIZE: usize = 128 * 0x10_0000; // 128MiB
 pub const KERNEL_STACK_SIZE: usize = 128 * 0x400; // 128KiB
 /// Fixed Kernel Stack Size represented in bit shift
 pub const KERNEL_STACK_SHIFT: usize = 20 + 3; // 8MiB
+
+/// The Paging strategy used
+pub type Paging = LAPaging;
 
 /// The size of a normal page
 pub const PAGE_SIZE: usize = 0x1000;

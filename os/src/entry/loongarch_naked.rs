@@ -2,13 +2,12 @@ use core::arch::{global_asm, naked_asm};
 
 use crate::{
     arch::{
-        PrvLevelBits,
+        CombinablePriority,
         mm::{
             KERNEL_STACK, MemAccessType,
             config::{KERNEL_SPACE_OFFSET, KERNEL_STACK_SIZE, MMIO_OFFSET},
-            paging::CrDMWValue,
         },
-        reg::{CR_CPUID, CR_CRMD, CR_DMW0, CR_DMW1, CR_DMW2, CR_PRMD},
+        reg::{CR_CPUID, CR_CRMD, CR_DMW0, CR_DMW1, CR_DMW2, CR_PRMD, CrDMWValue},
     },
     devices::device_info::FdtTree,
     entry::shared::clear_bss,
@@ -16,16 +15,16 @@ use crate::{
 };
 
 const BOOT_DMW0: CrDMWValue = CrDMWValue::create(
-    PrvLevelBits::PLV0,
+    CombinablePriority::PLV0,
     MemAccessType::STRONG_NONCACHE,
     MMIO_OFFSET,
 );
 const BOOT_DMW1: CrDMWValue = CrDMWValue::create(
-    PrvLevelBits::PLV0,
+    CombinablePriority::PLV0,
     MemAccessType::CACHE,
     KERNEL_SPACE_OFFSET,
 );
-const BOOT_DMW2: CrDMWValue = CrDMWValue::create(PrvLevelBits::PLV0, MemAccessType::CACHE, 0);
+const BOOT_DMW2: CrDMWValue = CrDMWValue::create(CombinablePriority::PLV0, MemAccessType::CACHE, 0);
 
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
@@ -98,8 +97,6 @@ global_asm! {
         .incbin \"runtime/qemu-loongarch64.dtb\"
     "
 }
-
-fn copy_dtb() {}
 
 fn start(hart_id: usize) -> ! {
     clear_bss();

@@ -1,5 +1,5 @@
 export BUILD_TYPE		:= debug
-export DEFAULT_BUILD	:= riscv64-sbi
+export DEFAULT_BUILD	:= loongarch64-naked
 
 export ALL_BUILDS		:= riscv64-sbi loongarch64-naked
 

@@ -12,7 +12,7 @@ pub type SBITable = sbi::SBITable;
 
 bitflags! {
     /// Priority Levels in Loongarch, presented in bit flags
-    pub struct PrvLevelBits: u8{
+    pub struct CombinablePriority: u8{
         /// PLV0 Available
         const PLV0 = 0b0001;
         /// PLV1 Available
