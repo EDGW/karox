@@ -21,7 +21,7 @@ pub const CR_DMW1: u16 = 0x181;
 pub const CR_DMW2: u16 = 0x182;
 
 
-define_struct_num!(CrDMWValue, usize);
+define_struct!(num,CrDMWValue, usize);
 impl CrDMWValue {
     const VSEG_FILTER: usize = 0xf000_0000_0000_0000;
 

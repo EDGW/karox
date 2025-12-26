@@ -1,12 +1,12 @@
 //! Loongarch Paging
 
-use crate::{arch::mm::config::Paging, define_struct_num, mm::PagingMode};
+use crate::{arch::mm::config::Paging,  mm::PagingMode};
 
 // Represents a page number.
 //
 // Provides methods to convert between addresses and page numbers, as well as utilities for
 // kernel-to-physical and physical-to-kernel address translations.
-define_struct_num!(PageNum, usize);
+define_struct!(num,PageNum, usize);
 impl PageNum {
     /// Creates a [PageNum] from an address.
     #[inline(always)]

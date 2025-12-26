@@ -1,9 +1,10 @@
-//! This module provides macros for defining packed structs with various attributes and behaviors.
+//! Macros for defining packed structs with various attributes and behaviors.
 
-/// Defines a struct that implements [Copy] and is aligned to a specific number of bits.
+/// Defines a packed struct with [Deref], [DerefMut], and utility methods.
+/// Supports variants: copy_aligned, num, copy, aligned, or default.
 #[macro_export]
-macro_rules! define_struct_copy_aligned {
-    ($name: ident, $type: ty, $align: expr) => {
+macro_rules! define_struct {
+    (copy_aligned, $name: ident, $type: ty, $align: expr) => {
         #[allow(missing_docs)]
         #[derive(Debug, Copy, Clone)]
         #[repr(align($align))]
@@ -26,22 +27,22 @@ macro_rules! define_struct_copy_aligned {
         }
 
         impl $name {
-            /// Create the packed type from the inner value
+            /// Creates new instance from value.
             pub const fn from_value(value: $type) -> Self {
                 Self(value)
             }
-            /// Get the inner value
+            /// Gets inner value.
             pub const fn get_value(&self) -> $type {
                 self.0
             }
+            /// Sets inner value.
+            pub const fn set_value(&mut self, value: $type) {
+                self.0 = value;
+            }
         }
     };
-}
 
-/// Defines a struct that behaves like a number.
-#[macro_export]
-macro_rules! define_struct_num {
-    ($name: ident, $type: ty) => {
+    (num, $name: ident, $type: ty) => {
         #[allow(missing_docs)]
         #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
         #[repr(C)]
@@ -63,13 +64,17 @@ macro_rules! define_struct_num {
         }
 
         impl $name {
-            /// Create the packed type from the inner value
+            /// Creates new instance from value.
             pub const fn from_value(value: $type) -> Self {
                 Self(value)
             }
-            /// Get the inner value
+            /// Gets inner value.
             pub const fn get_value(&self) -> $type {
                 self.0
+            }
+            /// Sets inner value.
+            pub const fn set_value(&mut self, value: $type) {
+                self.0 = value;
             }
         }
 
@@ -136,12 +141,8 @@ macro_rules! define_struct_num {
             }
         }
     };
-}
 
-/// Defines a struct that implements [Copy].
-#[macro_export]
-macro_rules! define_struct_copy {
-    ($name: ident, $type: ty) => {
+    (copy, $name: ident, $type: ty) => {
         #[allow(missing_docs)]
         #[derive(Debug, Copy, Clone)]
         #[repr(C)]
@@ -163,21 +164,21 @@ macro_rules! define_struct_copy {
         }
 
         impl $name {
-            /// Create the packed type from the inner value
+            /// Creates new instance from value.
             pub const fn from_value(value: $type) -> Self {
                 Self(value)
             }
-            /// Get the inner value
+            /// Gets inner value.
             pub const fn get_value(&self) -> $type {
                 self.0
             }
+            /// Sets inner value.
+            pub const fn set_value(&mut self, value: $type) {
+                self.0 = value;
+            }
         }
     };
-}
 
-/// Defines a basic struct.
-#[macro_export]
-macro_rules! define_struct {
     ($name: ident, $type: ty) => {
         #[allow(missing_docs)]
         #[derive(Debug)]
@@ -199,12 +200,8 @@ macro_rules! define_struct {
             }
         }
     };
-}
 
-/// Defines a struct aligned to a specific number of bits.
-#[macro_export]
-macro_rules! define_struct_aligned {
-    ($name: ident, $type: ty, $align: expr) => {
+    (aligned, $name: ident, $type: ty, $align: expr) => {
         #[allow(missing_docs)]
         #[derive(Debug)]
         #[repr(C)]
@@ -225,5 +222,112 @@ macro_rules! define_struct_aligned {
                 &mut self.0
             }
         }
+    };
+}
+
+/// Defines bit-field properties with getter, setter, and modifier methods.
+/// Supports variants: bitflags, num, packed_num.
+#[macro_export]
+macro_rules! define_prop_bits {
+    (bitflags, $prop_name: ident, $prop_type: tt, $bitflag_type: tt, $st:expr, $ed:expr) => {
+        paste::paste!{
+            /// Bit mask for property.
+            pub const [<PROP_ $prop_name:upper _MASK>]: usize = (((1 as usize)<<($ed-1))+(((1 as usize)<<($ed-1))-1)) - (((1 as usize)<<($st as usize))-1);
+
+            /// Gets property value.
+            pub fn [<get_ $prop_name>](&self) -> $prop_type{
+                $prop_type{bits:(((&self.get_value() & Self::[<PROP_ $prop_name:upper _MASK>]) >> $st)) as $bitflag_type}
+            }
+
+            /// Sets property value.
+            pub fn [<set_ $prop_name>](&mut self,value: $prop_type){
+                let val = ((value.bits as usize) << ($st as usize)) & Self::[<PROP_ $prop_name:upper _MASK>];
+                let mut reg = self.get_value();
+                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
+                reg |= val;
+                self.set_value(reg);
+            }
+
+            /// Modifies property and returns new instance.
+            pub fn [<with_ $prop_name>](&mut self,value: $prop_type) -> Self{
+                let val = ((value.bits as usize) << ($st as usize)) & Self::[<PROP_ $prop_name:upper _MASK>];
+                let mut reg = self.get_value();
+                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
+                reg |= val;
+                Self::from_value(reg)
+            }
+        }
+    };
+
+    (num, $prop_name: ident, $prop_type: tt, $st:expr, $ed:expr) => {
+        paste::paste!{
+            /// Bit mask for property.
+            pub const [<PROP_ $prop_name:upper _MASK>]: usize = (((1 as usize)<<($ed-1))+(((1 as usize)<<($ed-1))-1)) - (((1 as usize)<<($st as usize))-1);
+
+            /// Gets property value.
+            pub fn [<get_ $prop_name>](&self) -> $prop_type{
+                (((&self.get_value() & Self::[<PROP_ $prop_name:upper _MASK>]) >> $st)) as $prop_type
+            }
+
+            /// Sets property value.
+            pub fn [<set_ $prop_name>](&mut self,value: $prop_type){
+                let val = ((value as usize) << ($st as usize)) as usize & Self::[<PROP_ $prop_name:upper _MASK>];
+                let mut reg = self.get_value();
+                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
+                reg |= val;
+                self.set_value(reg);
+
+            }
+
+            /// Modifies property and returns new instance.
+            pub fn [<with_ $prop_name>](&mut self,value: $prop_type) -> Self{
+                let val = ((value as usize) << ($st as usize)) as usize & Self::[<PROP_ $prop_name:upper _MASK>];
+                let mut reg = self.get_value();
+                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
+                reg |= val;
+                Self::from_value(reg)
+            }
+        }
+    };
+
+    (packed_num, $prop_name: ident, $prop_type: tt, $st:expr, $ed:expr) => {
+        paste::paste!{
+            /// Bit mask for property.
+            pub const [<PROP_ $prop_name:upper _MASK>]: usize = (((1 as usize)<<($ed-1))+(((1 as usize)<<($ed-1))-1)) - (((1 as usize)<<($st as usize))-1);
+
+            /// Gets property value.
+            pub fn [<get_ $prop_name>](&self) -> $prop_type{
+                $prop_type::from_value((&self.get_value() & Self::[<PROP_ $prop_name:upper _MASK>]) >> $st)
+            }
+
+            /// Sets property value.
+            pub fn [<set_ $prop_name>](&mut self,value: $prop_type){
+                let val = ((value.get_value() as usize) << ($st as usize)) as usize & Self::[<PROP_ $prop_name:upper _MASK>];
+                let mut reg = self.get_value();
+                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
+                reg |= val;
+                self.set_value(reg);
+
+            }
+
+            /// Modifies property and returns new instance.
+            pub fn [<with_ $prop_name>](&mut self,value: $prop_type) -> Self{
+                let val = ((value.get_value() as usize) << ($st as usize)) as usize & Self::[<PROP_ $prop_name:upper _MASK>];
+                let mut reg = self.get_value();
+                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
+                reg |= val;
+                Self::from_value(reg)
+            }
+        }
+    };
+}
+
+/// Defines multiple bit-field properties using [define_prop_bits].
+#[macro_export]
+macro_rules! define_bits_value {
+    ( $( property($type:ident, $prop_name: ident, $prop_type: tt, $($args:tt),+) ; )* ) => {
+        $(
+            define_prop_bits!($type,$prop_name, $prop_type, $($args),+);
+        )*
     };
 }

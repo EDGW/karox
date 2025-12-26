@@ -4,11 +4,11 @@
 
 use buddy_system_allocator::LockedHeap;
 
-use crate::{arch::mm::config::KERNEL_HEAP_SIZE, define_struct_aligned, kserial_println};
+use crate::{arch::mm::config::KERNEL_HEAP_SIZE, define_struct, kserial_println};
 
 // The packed type for heap space.
 // It's a huge struct aligned to a page
-define_struct_aligned!(HeapSpace, [u8; KERNEL_HEAP_SIZE], 4096);
+define_struct!(aligned, HeapSpace, [u8; KERNEL_HEAP_SIZE], 4096);
 
 /// The kernel heap space
 #[unsafe(link_section = ".bss.heap")]

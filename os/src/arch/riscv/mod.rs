@@ -3,6 +3,7 @@
 pub mod mm;
 pub mod reg;
 mod sbi;
+pub mod trap;
 
 // TODO:Temporarily Used
 #[allow(missing_docs)]

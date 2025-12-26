@@ -4,9 +4,7 @@
 //! of page numbers, page table entries, and page tables. It also includes utilities for creating
 //! and managing page tables during early boot steps.
 
-use crate::{
-    arch::mm::config::Paging, define_struct_copy_aligned, define_struct_num, mm::PagingMode,
-};
+use crate::{arch::mm::config::Paging, define_struct, mm::PagingMode};
 use bitflags::bitflags;
 
 pub mod sv39;
@@ -15,7 +13,7 @@ pub mod sv39;
 //
 // Provides methods to convert between addresses and page numbers, as well as utilities for
 // kernel-to-physical and physical-to-kernel address translations.
-define_struct_num!(PageNum, usize);
+define_struct!(num, PageNum, usize);
 impl PageNum {
     /// Creates a [PageNum] from an address.
     #[inline(always)]
@@ -81,7 +79,7 @@ bitflags! {
 //
 // Provides methods to create and manipulate page table entries, including setting flags and
 // creating invalid entries.
-define_struct_num!(PageTableEntry, usize);
+define_struct!(num, PageTableEntry, usize);
 impl PageTableEntry {
     const FLAG_BITS_MASK: usize = 0xff;
 
@@ -111,7 +109,8 @@ impl PageTableEntry {
 }
 
 // Represents a page table.
-define_struct_copy_aligned!(
+define_struct!(
+    copy_aligned,
     PageTableValue,
     [PageTableEntry; Paging::PTABLE_ENTRY_COUNT],
     4096
