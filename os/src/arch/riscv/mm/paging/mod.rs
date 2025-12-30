@@ -91,6 +91,12 @@ impl PageTableEntry {
         }
     }
 
+    /// Retrieves the ppn of the page table entry.
+    #[inline(always)]
+    pub const fn get_ppn(&self) -> PageNum {
+        PageNum::from_value(self.get_value() >> 10)
+    }
+
     /// Creates a page table entry from a page number and flags.
     #[inline(always)]
     pub const fn create(ppn: PageNum, flags: PageTableFlags) -> PageTableEntry {

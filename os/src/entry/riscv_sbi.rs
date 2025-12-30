@@ -9,15 +9,16 @@
 
 use core::arch::naked_asm;
 
+use riscv::register::satp;
+
 use crate::{
     arch::{
         endian::EndianData,
         mm::{
             KERNEL_STACK,
             config::{KERNEL_STACK_SHIFT, Paging},
-            paging::{BOOT_PTABLE, PageNum},
+            paging::BOOT_PTABLE,
         },
-        reg::{CrSatpModes, CrSatpValue},
         symbols::_ekernel,
     },
     devices::device_info::FdtTree,
@@ -30,7 +31,7 @@ use crate::{
 /// Boot `satp` register value
 ///
 /// The paging mod is set to SV39, and the ppn is set during [_start]
-const BOOT_SATP: CrSatpValue = CrSatpValue::create(CrSatpModes::SV39, 0, PageNum::from_value(0));
+const BOOT_SATP: usize = (satp::Mode::Sv39 as usize) << 60;
 
 /// The entry point of the operating system
 ///
@@ -111,7 +112,7 @@ unsafe extern "C" fn setup(hart_id: usize, dtb_ptr: *const u8) -> ! {
         boot_stack_p = sym KERNEL_STACK,
         boot_stack_shift = const KERNEL_STACK_SHIFT,
         //boot_stack_size  = const KERNEL_STACK_SIZE,
-        boot_satp = const BOOT_SATP.0,
+        boot_satp = const BOOT_SATP,
         boot_table_addr = sym BOOT_PTABLE,
         page_width = const Paging::PAGE_WIDTH,
         offset = const Paging::KERNEL_OFFSET,

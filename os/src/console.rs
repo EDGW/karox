@@ -22,13 +22,13 @@ pub fn serial_print(args: Arguments) {
 /// print string macro
 macro_rules! kserial_print {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::console::serial_print(format_args!($fmt $(, $($arg)+)?));
+        $crate::console::serial_print(format_args!($fmt $(, $($arg)+)?))
     }
 }
 
 #[macro_export]
 macro_rules! kserial_println {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::console::serial_print(format_args!(concat!($fmt, "\r\n") $(, $($arg)+)?));   // Use CR-LF to adapt to QEMU
+        $crate::console::serial_print(format_args!(concat!($fmt, "\r\n") $(, $($arg)+)?))   // Use CR-LF to adapt to QEMU
     }
 }

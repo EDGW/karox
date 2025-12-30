@@ -1,9 +1,7 @@
 //! This module contains drivers and management methods for physical devices
 
 use crate::{
-    arch::symbols::{_ekernel, _skernel},
-    devices::device_info::DeviceInfo,
-    mm,
+    arch::{symbols::{_ekernel, _skernel}, trap}, devices::device_info::DeviceInfo, kserial_println, mm
 };
 
 pub mod device_info;
@@ -18,6 +16,7 @@ pub fn init(dev_info: impl DeviceInfo) {
     }
     print_mem_info(&dev_info);
     mm::init_memory(dev_info.get_mem_info().unwrap());
+    trap::init_trap();
     kserial_println!("All Devices Initialized.");
 }
 

@@ -100,9 +100,9 @@ macro_rules! define_struct {
         }
 
         impl core::ops::Sub for $name {
-            type Output = $name;
+            type Output = $type;
             fn sub(self, rhs: Self) -> Self::Output {
-                $name(self.0 - rhs.0)
+                self.0 - rhs.0
             }
         }
 
@@ -222,112 +222,5 @@ macro_rules! define_struct {
                 &mut self.0
             }
         }
-    };
-}
-
-/// Defines bit-field properties with getter, setter, and modifier methods.
-/// Supports variants: bitflags, num, packed_num.
-#[macro_export]
-macro_rules! define_prop_bits {
-    (bitflags, $prop_name: ident, $prop_type: tt, $bitflag_type: tt, $st:expr, $ed:expr) => {
-        paste::paste!{
-            /// Bit mask for property.
-            pub const [<PROP_ $prop_name:upper _MASK>]: usize = (((1 as usize)<<($ed-1))+(((1 as usize)<<($ed-1))-1)) - (((1 as usize)<<($st as usize))-1);
-
-            /// Gets property value.
-            pub fn [<get_ $prop_name>](&self) -> $prop_type{
-                $prop_type{bits:(((&self.get_value() & Self::[<PROP_ $prop_name:upper _MASK>]) >> $st)) as $bitflag_type}
-            }
-
-            /// Sets property value.
-            pub fn [<set_ $prop_name>](&mut self,value: $prop_type){
-                let val = ((value.bits as usize) << ($st as usize)) & Self::[<PROP_ $prop_name:upper _MASK>];
-                let mut reg = self.get_value();
-                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
-                reg |= val;
-                self.set_value(reg);
-            }
-
-            /// Modifies property and returns new instance.
-            pub fn [<with_ $prop_name>](&mut self,value: $prop_type) -> Self{
-                let val = ((value.bits as usize) << ($st as usize)) & Self::[<PROP_ $prop_name:upper _MASK>];
-                let mut reg = self.get_value();
-                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
-                reg |= val;
-                Self::from_value(reg)
-            }
-        }
-    };
-
-    (num, $prop_name: ident, $prop_type: tt, $st:expr, $ed:expr) => {
-        paste::paste!{
-            /// Bit mask for property.
-            pub const [<PROP_ $prop_name:upper _MASK>]: usize = (((1 as usize)<<($ed-1))+(((1 as usize)<<($ed-1))-1)) - (((1 as usize)<<($st as usize))-1);
-
-            /// Gets property value.
-            pub fn [<get_ $prop_name>](&self) -> $prop_type{
-                (((&self.get_value() & Self::[<PROP_ $prop_name:upper _MASK>]) >> $st)) as $prop_type
-            }
-
-            /// Sets property value.
-            pub fn [<set_ $prop_name>](&mut self,value: $prop_type){
-                let val = ((value as usize) << ($st as usize)) as usize & Self::[<PROP_ $prop_name:upper _MASK>];
-                let mut reg = self.get_value();
-                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
-                reg |= val;
-                self.set_value(reg);
-
-            }
-
-            /// Modifies property and returns new instance.
-            pub fn [<with_ $prop_name>](&mut self,value: $prop_type) -> Self{
-                let val = ((value as usize) << ($st as usize)) as usize & Self::[<PROP_ $prop_name:upper _MASK>];
-                let mut reg = self.get_value();
-                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
-                reg |= val;
-                Self::from_value(reg)
-            }
-        }
-    };
-
-    (packed_num, $prop_name: ident, $prop_type: tt, $st:expr, $ed:expr) => {
-        paste::paste!{
-            /// Bit mask for property.
-            pub const [<PROP_ $prop_name:upper _MASK>]: usize = (((1 as usize)<<($ed-1))+(((1 as usize)<<($ed-1))-1)) - (((1 as usize)<<($st as usize))-1);
-
-            /// Gets property value.
-            pub fn [<get_ $prop_name>](&self) -> $prop_type{
-                $prop_type::from_value((&self.get_value() & Self::[<PROP_ $prop_name:upper _MASK>]) >> $st)
-            }
-
-            /// Sets property value.
-            pub fn [<set_ $prop_name>](&mut self,value: $prop_type){
-                let val = ((value.get_value() as usize) << ($st as usize)) as usize & Self::[<PROP_ $prop_name:upper _MASK>];
-                let mut reg = self.get_value();
-                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
-                reg |= val;
-                self.set_value(reg);
-
-            }
-
-            /// Modifies property and returns new instance.
-            pub fn [<with_ $prop_name>](&mut self,value: $prop_type) -> Self{
-                let val = ((value.get_value() as usize) << ($st as usize)) as usize & Self::[<PROP_ $prop_name:upper _MASK>];
-                let mut reg = self.get_value();
-                reg &= !Self::[<PROP_ $prop_name:upper _MASK>];
-                reg |= val;
-                Self::from_value(reg)
-            }
-        }
-    };
-}
-
-/// Defines multiple bit-field properties using [define_prop_bits].
-#[macro_export]
-macro_rules! define_bits_value {
-    ( $( property($type:ident, $prop_name: ident, $prop_type: tt, $($args:tt),+) ; )* ) => {
-        $(
-            define_prop_bits!($type,$prop_name, $prop_type, $($args),+);
-        )*
     };
 }

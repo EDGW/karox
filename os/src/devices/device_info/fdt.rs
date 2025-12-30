@@ -10,14 +10,10 @@ use crate::{
     arch::{
         endian::{BigEndian32, BigEndian64, EndianData},
         mm::config::Paging,
-    },
-    devices::device_info::{
+    }, devices::device_info::{
         DeviceInfo, MemoryAreaInfo,
         device_tree::{DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo},
-    },
-    error::MessageError,
-    mm::PagingMode,
-    utils::{num::AlignableTo, range::Range},
+    }, error::MessageError, kserial_print, mm::PagingMode, utils::{num::AlignableTo, range::Range}
 };
 
 const PAGE_SIZE: usize = Paging::PAGE_SIZE;

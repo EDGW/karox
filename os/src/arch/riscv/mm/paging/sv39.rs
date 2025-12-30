@@ -43,24 +43,19 @@
 
 use crate::{
     arch::{
-        mm::{
-            config::Paging,
-            paging::{PageNum, PageTableEntry, PageTableFlags, PageTableValue, fill_linear_ptable},
-        },
-        reg::{CrSatp, CrSatpModes, CrSatpValue},
-        symbols::{_ebss, _edata, _erodata, _etext, _sbss, _sdata, _skernel, _srodata, _stext},
+        mm::paging::{PageNum, PageTableEntry, PageTableFlags, PageTableValue},
+        symbols::{_ebss, _edata, _erodata, _etext, _sbss, _sdata, _srodata, _stext},
     },
     devices::device_info::MemoryAreaInfo,
-    kserial_println,
     mm::{
         PagingMode,
-        frame::{FRAME_ALLOC, ManagedFrames},
+        frame::{FRAME_ALLOC, FrameAllocatorError, ManagedFrame},
     },
     phys_addr_from_kernel,
-    utils::{num::AlignableTo, range::Range},
 };
-use alloc::vec::Vec;
-use core::slice::Iter;
+use alloc::boxed::Box;
+use core::{array, usize};
+use riscv::register::satp;
 use spin::once::Once;
 
 const GB: usize = 1024 * 1024 * 1024;
@@ -96,20 +91,13 @@ impl SV39Paging {
 
     /// Number of entries in a page table.
     pub const PTABLE_ENTRY_COUNT: usize = 512;
+    const AVAILABLE_ADDR_MASK: usize = (1 << 39) - 1;
 }
 
 /// Root page table of the kernel.
 ///
 /// The upper 256 entries are marked as global and shared by all page tables.
-pub static KERNEL_ROOT_TABLE: Once<ManagedFrames> = Once::new();
-
-/// Level-1 page tables used to map the MMIO space.
-///
-/// [SV39Paging::MMIO_PAGE_COUNT] tables in total.
-pub static MMIO_TABLES: Once<ManagedFrames> = Once::new();
-
-/// Page tables used to map the kernel binary itself (`kbin_space`).
-pub static KBIN_SPACE_TABLES: Once<ManagedFrames> = Once::new();
+pub static KERNEL_ROOT_TABLE: Once<PageTable> = Once::new();
 
 impl PagingMode for SV39Paging {
     const KERNEL_OFFSET: usize = 0xffff_ffc0_0000_0000;
@@ -124,142 +112,397 @@ impl PagingMode for SV39Paging {
     }
 }
 
+pub struct PageTableTracker {
+    table_frame: ManagedFrame,
+    table_entries: Option<Box<[Option<PageTableTracker>; 512]>>,
+    mapped_entries: usize,
+}
+pub struct PageTable {
+    table: PageTableTracker,
+}
+
+impl PageTableTracker {
+    #[inline(always)]
+    fn get_table_ref(&self) -> &mut PageTableValue {
+        unsafe { self.table_frame.get_ref::<PageTableValue>() }
+    }
+    fn get_entries_arr(&mut self) -> &mut [Option<PageTableTracker>; 512] {
+        self.table_entries
+            .get_or_insert_with(|| Box::new(array::from_fn(|_| None)));
+        self.table_entries.as_mut().unwrap()
+    }
+
+    unsafe fn fill_or_create(
+        &mut self,
+        st_index: usize,
+        st_vpn_offset: usize,
+        ppn: usize,
+        count: usize,
+        w_offset: usize,
+        flags: PageTableFlags,
+        dir_flags: PageTableFlags,
+    ) -> Result<(), FrameAllocatorError> {
+        let prev_entry = self.get_table_ref()[st_index];
+        let has_entry = prev_entry != PageTableEntry::create_invalid();
+        let prev_ppn = prev_entry.get_ppn().get_value();
+        let prev_flags = prev_entry.get_flags();
+        let arr = self.get_entries_arr();
+        let sub_vpn_offset = st_vpn_offset & ((1 << w_offset) - 1);
+        if let Some(tracker) = &mut arr[st_index] {
+            // fill
+            unsafe {
+                return tracker.map_internal(
+                    sub_vpn_offset,
+                    count,
+                    ppn,
+                    w_offset - 9,
+                    flags,
+                    dir_flags,
+                );
+            }
+        } else {
+            if has_entry && prev_ppn + sub_vpn_offset == ppn && prev_flags == flags {
+                // no need to expand
+                return Ok(());
+            }
+            let frame = FRAME_ALLOC.alloc_managed()?;
+            let frame_ppn = frame.get_ppn();
+            let mut frame_tracker = PageTableTracker {
+                table_frame: frame,
+                table_entries: None,
+                mapped_entries: 0,
+            };
+            unsafe {
+                if has_entry {
+                    // expand
+                    frame_tracker.map_internal(
+                        0,
+                        sub_vpn_offset,
+                        prev_ppn,
+                        w_offset - 9,
+                        prev_flags,
+                        dir_flags,
+                    )?;
+                    frame_tracker.map_internal(
+                        sub_vpn_offset,
+                        count,
+                        ppn,
+                        w_offset - 9,
+                        flags,
+                        dir_flags,
+                    )?;
+                    frame_tracker.map_internal(
+                        sub_vpn_offset + count,
+                        (1 << w_offset) - sub_vpn_offset - count,
+                        prev_ppn + sub_vpn_offset + count,
+                        w_offset - 9,
+                        prev_flags,
+                        dir_flags,
+                    )?;
+                } else {
+                    // create new
+                    frame_tracker.map_internal(
+                        sub_vpn_offset,
+                        count,
+                        ppn,
+                        w_offset - 9,
+                        flags,
+                        dir_flags,
+                    )?;
+                }
+                // automatically destroy allocated frame if failed
+            }
+            arr[st_index] = Some(frame_tracker);
+            self.get_table_ref()[st_index] = PageTableEntry::create(frame_ppn, dir_flags);
+            self.mapped_entries += 1;
+        }
+        Ok(())
+    }
+
+    /// **This function assumes that the address range has not been mapped**
+    unsafe fn map_internal(
+        &mut self,
+        vpn_offset: usize,
+        count: usize,
+        ppn: usize,
+        w_offset: usize,
+        flags: PageTableFlags,
+        dir_flags: PageTableFlags,
+    ) -> Result<(), FrameAllocatorError> {
+        let st_vpn_offset = vpn_offset;
+        // 1) Leaf Page
+        if w_offset == 0 {
+            for i in 0..count {
+                self.get_table_ref()[st_vpn_offset + i] =
+                    PageTableEntry::create(PageNum::from_value(ppn + i), flags);
+            }
+            self.mapped_entries += count;
+            return Ok(());
+        }
+        // 2) Directory Page
+        let ed_vpn_offset = vpn_offset + count;
+        let st_index = st_vpn_offset >> w_offset;
+        let ed_index = ed_vpn_offset >> w_offset;
+        let ppn_aligned = ppn >> w_offset << w_offset;
+        // 2-1) in a single page
+        if st_index == ed_index {
+            unsafe {
+                self.fill_or_create(
+                    st_index,
+                    st_vpn_offset,
+                    ppn,
+                    count,
+                    w_offset,
+                    flags,
+                    dir_flags,
+                )?;
+            }
+            Ok(())
+        }
+        // 2-2) across multiple pages
+        else {
+            let st_vo_aligned = st_index << w_offset;
+            let ed_vo_aligned = ed_index << w_offset;
+            if st_vo_aligned != st_vpn_offset {
+                // incomplete first
+                unsafe {
+                    self.fill_or_create(
+                        st_index,
+                        st_vpn_offset,
+                        ppn,
+                        (1 << w_offset) - (st_vpn_offset - st_vo_aligned),
+                        w_offset,
+                        flags,
+                        dir_flags,
+                    )?;
+                }
+            } else {
+                // complete first
+                self.get_table_ref()[st_index] =
+                    PageTableEntry::create(PageNum::from_value(ppn), flags);
+                self.mapped_entries += 1;
+            }
+            let dir_subpage_cnt = 1 << w_offset;
+            if ed_vo_aligned != ed_vpn_offset {
+                // non-null last
+                unsafe {
+                    if let Err(err) = self.fill_or_create(
+                        ed_index,
+                        ed_vo_aligned,
+                        ppn_aligned + dir_subpage_cnt * (ed_index - st_index),
+                        ed_vpn_offset - ed_vo_aligned,
+                        w_offset,
+                        flags,
+                        dir_flags,
+                    ) {
+                        self.get_table_ref()[st_index] = PageTableEntry::create_invalid();
+                        let arr = self.get_entries_arr();
+                        arr[st_index] = None; // resume
+                        return Err(err);
+                    }
+                }
+            } else {
+                // ingore
+            }
+            for i in 1..(ed_index - st_index) {
+                // middle
+                self.get_table_ref()[st_index + i] = PageTableEntry::create(
+                    PageNum::from_value(ppn_aligned + dir_subpage_cnt * i),
+                    flags,
+                );
+                self.mapped_entries += 1;
+            }
+            Ok(())
+        }
+    }
+    fn clean_if_exist(
+        &mut self,
+        st_index: usize,
+        st_vpn_offset: usize,
+        count: usize,
+        w_offset: usize,
+    ) {
+        let arr = self.get_entries_arr();
+        let sub_vpn_offset = st_vpn_offset & ((1 << w_offset) - 1);
+        let mut dispose = false;
+        if let Some(tracker) = &mut arr[st_index] {
+            tracker.clean_internal(sub_vpn_offset, count, w_offset - 9);
+            if tracker.mapped_entries == 0 {
+                dispose = true;
+            }
+        }
+        if dispose {
+            arr[st_index] = None;
+            self.get_table_ref()[st_index] = PageTableEntry::create_invalid();
+            self.mapped_entries -= 1;
+        }
+    }
+    fn clean_internal(&mut self, vpn_offset: usize, count: usize, w_offset: usize) {
+        let st_vpn_offset = vpn_offset;
+        // 1) Leaf Page
+        if w_offset == 0 {
+            for i in 0..count {
+                let table = self.get_table_ref();
+                let invalid = PageTableEntry::create_invalid();
+                if table[st_vpn_offset + i] != invalid {
+                    table[st_vpn_offset + i] = invalid;
+                    self.mapped_entries -= 1;
+                }
+            }
+            return;
+        }
+        // 2) Directory Page
+        let ed_vpn_offset = vpn_offset + count;
+        let st_index = st_vpn_offset >> w_offset;
+        let ed_index = ed_vpn_offset >> w_offset;
+        // 2-1) in a single page
+        if st_index == ed_index {
+            self.clean_if_exist(st_index, st_vpn_offset, count, w_offset);
+        }
+        // 2-2) across multiple pages
+        else {
+            let st_vo_aligned = st_index << w_offset;
+            let ed_vo_aligned = ed_index << w_offset;
+            if st_vo_aligned != st_vpn_offset {
+                // incomplete first
+                self.clean_if_exist(
+                    st_index,
+                    st_vpn_offset,
+                    (1 << w_offset) - (st_vpn_offset - st_vo_aligned),
+                    w_offset,
+                );
+            } else {
+                // complete first
+                let table = self.get_table_ref();
+                let invalid = PageTableEntry::create_invalid();
+                if table[st_index] != invalid {
+                    table[st_index] = invalid;
+                    self.get_entries_arr()[st_index] = None;
+                    self.mapped_entries -= 1;
+                }
+            }
+            if ed_vo_aligned != ed_vpn_offset {
+                // non-null last
+                self.clean_if_exist(
+                    ed_index,
+                    ed_vo_aligned,
+                    ed_vpn_offset - ed_vo_aligned,
+                    w_offset,
+                );
+            } else {
+                // ingore
+            }
+            for i in 1..(ed_index - st_index) {
+                // middle
+                let table = self.get_table_ref();
+                let invalid = PageTableEntry::create_invalid();
+                if table[st_index + i] != invalid {
+                    table[st_index + i] = invalid;
+                    self.get_entries_arr()[st_index + i] = None;
+                    self.mapped_entries -= 1;
+                }
+            }
+        }
+    }
+}
+
+impl PageTable {
+    pub fn new() -> Result<PageTable, FrameAllocatorError> {
+        let frame = FRAME_ALLOC.alloc_managed()?;
+        Ok(PageTable {
+            table: PageTableTracker {
+                table_frame: frame,
+                table_entries: None,
+                mapped_entries: 0,
+            },
+        })
+    }
+    pub fn map(
+        &mut self,
+        vpn: PageNum,
+        count: usize,
+        ppn: PageNum,
+        rwx_flags: PageTableFlags,
+        global: bool,
+    ) -> Result<(), FrameAllocatorError> {
+        unsafe {
+            let flags = if global {
+                rwx_flags
+                    | PageTableFlags::VALID
+                    | PageTableFlags::GLOBAL
+                    | PageTableFlags::DIRTY
+                    | PageTableFlags::ACCESSED
+            } else {
+                rwx_flags | PageTableFlags::VALID | PageTableFlags::DIRTY | PageTableFlags::ACCESSED
+            };
+            let dir_flags = if global {
+                PageTableFlags::VALID | PageTableFlags::GLOBAL | PageTableFlags::DIR
+            } else {
+                PageTableFlags::VALID | PageTableFlags::DIR
+            };
+            self.table.clean_internal(
+                vpn.get_value() & (SV39Paging::AVAILABLE_ADDR_MASK >> SV39Paging::PAGE_WIDTH),
+                count,
+                SV39Paging::PG_WIDTH_L0 - SV39Paging::PG_WIDTH_L2,
+            );
+            self.table.map_internal(
+                vpn.get_value() & (SV39Paging::AVAILABLE_ADDR_MASK >> SV39Paging::PAGE_WIDTH),
+                count,
+                ppn.get_value(),
+                SV39Paging::PG_WIDTH_L0 - SV39Paging::PG_WIDTH_L2,
+                flags,
+                dir_flags,
+            )
+        }
+    }
+    pub unsafe fn map_unchecked(
+        &mut self,
+        vpn: PageNum,
+        count: usize,
+        ppn: PageNum,
+        rwx_flags: PageTableFlags,
+        global: bool,
+    ) -> Result<(), FrameAllocatorError> {
+        unsafe {
+            let flags = if global {
+                rwx_flags
+                    | PageTableFlags::VALID
+                    | PageTableFlags::GLOBAL
+                    | PageTableFlags::DIRTY
+                    | PageTableFlags::ACCESSED
+            } else {
+                rwx_flags | PageTableFlags::VALID | PageTableFlags::DIRTY | PageTableFlags::ACCESSED
+            };
+            let dir_flags = if global {
+                PageTableFlags::VALID | PageTableFlags::GLOBAL | PageTableFlags::DIR
+            } else {
+                PageTableFlags::VALID | PageTableFlags::DIR
+            };
+            self.table.map_internal(
+                vpn.get_value() & (SV39Paging::AVAILABLE_ADDR_MASK >> SV39Paging::PAGE_WIDTH),
+                count,
+                ppn.get_value(),
+                SV39Paging::PG_WIDTH_L0 - SV39Paging::PG_WIDTH_L2,
+                flags,
+                dir_flags,
+            )
+        }
+    }
+}
+
 /// Initializes paging.
 pub fn init_paging() {
     setup_kernel_ptable();
 }
 
-/// Converts the frames given in [ManagedFrames] to a page table vector
-unsafe fn convert_to_ptable_vec<'a>(frames: &'a ManagedFrames) -> Vec<&'a mut PageTableValue> {
-    frames
-        .iter()
-        .map(|ppn| unsafe {
-            &mut *(ppn.physical_to_kernel().get_base_addr() as *mut PageTableValue)
-        })
-        .collect()
-}
-
 /// Sets up the kernel page table.
 fn setup_kernel_ptable() {
-    // 1. Allocate space for the root page table and MMIO page tables
-    let root_table_managed = FRAME_ALLOC.alloc_managed(2).unwrap_or_else(|e| {
-        panic!(
-            "Failed to allocate space for the kernel root page table: {:?}",
-            e
-        )
+    let mut table = PageTable::new().unwrap_or_else(|err| {
+        panic!("Unable to set up the kernel page table: {:?}", err);
     });
-    let root_table = unsafe { root_table_managed.get_ref::<PageTableValue>(0) };
-    let mmio_tables_managed = FRAME_ALLOC
-        .alloc_managed(SV39Paging::MMIO_PAGE_COUNT)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to allocate space for dynamic mmio page table: {:?}",
-                e
-            )
-        });
-    let mut mmio_tables: Vec<&mut PageTableValue> =
-        unsafe { convert_to_ptable_vec(&mmio_tables_managed) };
 
-    // 2. Initialize page table entries
-    // [0, 255): invalid (user space not mapped here)
-    for i in 0..256 {
-        root_table[i] = PageTableEntry::create_invalid();
-    }
-
-    let entry_flags = PageTableFlags::RWX
-        | PageTableFlags::DIRTY
-        | PageTableFlags::ACCESSED
-        | PageTableFlags::VALID
-        | PageTableFlags::GLOBAL;
-    let pdir_flags = PageTableFlags::DIR | PageTableFlags::VALID | PageTableFlags::GLOBAL;
-
-    // [256, 512 - MMIO_PAGE_COUNT): linear direct mapping using 1GiB pages
-    for i in 0..(256 - SV39Paging::MMIO_PAGE_COUNT) {
-        root_table[256 + i] =
-            PageTableEntry::create(PageNum::from_addr(i * SV39Paging::PG_SIZE_L0), entry_flags);
-    }
-
-    // Kernel binary mapping (kbin_space)
-    let kernel_page_index = phys_addr_from_kernel!(_skernel) >> SV39Paging::PG_WIDTH_L0;
-    let kernel_tables = create_kbin_space_subtable();
-    root_table[256 + kernel_page_index] =
-        PageTableEntry::create(kernel_tables.get_ppn(0), pdir_flags);
-
-    // MMIO mapping
-    for i in 0..SV39Paging::MMIO_PAGE_COUNT {
-        root_table[(512 - SV39Paging::MMIO_PAGE_COUNT) + i] = PageTableEntry::create(
-            PageNum::from_addr((&mmio_tables[i]).as_ptr() as usize),
-            pdir_flags,
-        );
-        mmio_tables[i].fill(PageTableEntry::create_invalid());
-    }
-
-    // Write SATP register to enable SV39 paging
-    CrSatp::set_value(CrSatpValue::create(
-        CrSatpModes::SV39,
-        0,
-        root_table_managed.get_ppn(0),
-    ));
-
-    kserial_println!(
-        "Kernel page table initialized at {:#x}(ppn {:#x})",
-        unsafe { root_table_managed.get_kernel_ptr(0) } as *const u8 as usize,
-        root_table_managed.get_ppn(0).get_value()
-    );
-
-    // Preserve page table lifetime
-    KERNEL_ROOT_TABLE.call_once(|| root_table_managed);
-    MMIO_TABLES.call_once(|| mmio_tables_managed);
-    KBIN_SPACE_TABLES.call_once(|| kernel_tables);
-}
-
-/// Calculate the number of frames required to map the kernel binary itself
-fn calc_kbin_space_frames(sections: Iter<Range<usize>>, kstart_aligned: usize) -> usize {
-    let mut frame_cnt = 1; // the subtable itself
-    let mut frame_allocated = [false; SV39Paging::PTABLE_ENTRY_COUNT];
-    for secinfo in sections {
-        let sec = secinfo;
-        if sec.length == 0 {
-            continue;
-        }
-        let start = sec.start;
-        let end = sec.start + sec.length;
-        let s_aligned = start.align_down(SV39Paging::PG_SIZE_L1);
-        let e_aligned = end.align_down(SV39Paging::PG_SIZE_L1);
-        let s_entry_id = (start - kstart_aligned) >> SV39Paging::PG_WIDTH_L1;
-        let e_entry_id = (end - kstart_aligned) >> SV39Paging::PG_WIDTH_L1;
-        if s_aligned == e_aligned {
-            // less than a 2MiB page
-            if !frame_allocated[s_entry_id] {
-                frame_allocated[s_entry_id] = true;
-                frame_cnt += 1;
-            }
-        } else
-        // crossing pages
-        {
-            if start != s_aligned && !frame_allocated[s_entry_id] {
-                // incomplete first page
-                frame_allocated[s_entry_id] = true;
-                frame_cnt += 1;
-            }
-            if end != e_aligned && !frame_allocated[e_entry_id] {
-                // incomplete last page
-                frame_allocated[e_entry_id] = true;
-                frame_cnt += 1;
-            }
-        }
-    }
-    frame_cnt
-}
-
-/// Create the page table subtree for the kernel binary (`kbin_space`)
-///
-/// The kernel binary is guaranteed to occupy no more than 1GiB of physical memory.
-/// Therefore, a single level-1 page table is sufficient to cover this region.
-/// Entries corresponding to unused regions are filled with large (2MiB) pages.
-fn create_kbin_space_subtable() -> ManagedFrames {
-    // All sections and permissions of the kernel
-    let sec_perms = [
+    // kernel sections
+    let sections = [
         (
             MemoryAreaInfo::from_points(
                 phys_addr_from_kernel!(_stext),
@@ -289,187 +532,34 @@ fn create_kbin_space_subtable() -> ManagedFrames {
             PageTableFlags::RW,
         ),
     ];
-
-    let kpage_start = phys_addr_from_kernel!(_skernel).align_down(SV39Paging::PG_SIZE_L0);
-    let kpage_ppn = PageNum::from_addr(kpage_start);
-
-    // calculate the number of frames needed
-    let frame_cnt = calc_kbin_space_frames(sec_perms.map(|x| x.0).iter(), kpage_start);
-
-    // record the frame index of the page table, 0 if it's a large page and doesn't need subtable
-    let mut frame_indexies = [0 as u16; SV39Paging::PTABLE_ENTRY_COUNT];
-
-    // allocate frames
-    let frames_managed = FRAME_ALLOC
-        .alloc_managed(frame_cnt)
-        .unwrap_or_else(|e| panic!("Failed to allocate space for kernel page table: {:?}", e));
-    let mut frames = unsafe { convert_to_ptable_vec(&frames_managed) };
-
-    // base flags for non-directory entries
-    let baseflags = PageTableFlags::DIRTY
-        | PageTableFlags::ACCESSED
-        | PageTableFlags::VALID
-        | PageTableFlags::GLOBAL;
-    // flags for directory entries
-    let dirflags = PageTableFlags::DIR | PageTableFlags::VALID | PageTableFlags::GLOBAL;
-
-    // flags for entries to the pages not included in the kernel binary.
-    let normal_flags = baseflags | PageTableFlags::RWX;
-
-    // fill the table with 2MiB huge entries.
-    fill_linear_ptable(
-        &mut frames[0],
-        0,
-        kpage_ppn,
-        Paging::PTABLE_ENTRY_COUNT,
-        SV39Paging::PG_SIZE_L1,
-        normal_flags,
-    );
-
-    /// Fill or create level-2 page table entries
-    ///
-    /// * `frames_managed` and `frame_idx_counter` are used to allocate new frames.
-    ///   `frame_idx_counter` always points to the first unallocated frame.
-    /// * `frame_idx_recorder` records the allocated frame index for each level-1 entry
-    ///   (0 indicates no subtable is allocated).
-    /// * `kpage_start` is the base address of the level-0 page containing the kernel.
-    /// * `page_addr_start` is the base address of the corresponding level-1 page.
-    /// * `addr_start` and `addr_end` specify the exact address range to be mapped.
-    fn fill_sec(
-        frames_managed: &ManagedFrames,
-        frame_idx_recorder: &mut [u16; 512],
-        frame_idx_counter: &mut usize,
-        kpage_start: usize,
-        addr_start: usize,
-        page_addr_start: usize,
-        addr_end: usize,
-        item_flags: PageTableFlags,
-        dir_flags: PageTableFlags,
-        normal_flags: PageTableFlags,
-    ) {
-        let mut frames = unsafe { convert_to_ptable_vec(&frames_managed) };
-
-        let entry_id = (addr_start - kpage_start) >> SV39Paging::PG_WIDTH_L1;
-
-        let idx1 = (addr_start - page_addr_start) >> SV39Paging::PG_WIDTH_L2;
-        let idx2 = (addr_end - page_addr_start) >> SV39Paging::PG_WIDTH_L2;
-        let addr1 = addr_start;
-        let addr2 = addr_end;
-        if frame_idx_recorder[entry_id] != 0 {
-            // add to existing page
-            fill_linear_ptable(
-                &mut frames[frame_idx_recorder[entry_id] as usize],
-                idx1,
-                PageNum::from_addr(addr1),
-                idx2 - idx1,
-                SV39Paging::PG_SIZE_L2,
-                item_flags,
-            );
-        } else {
-            // create a new page
-            frames[0][entry_id] =
-                PageTableEntry::create(frames_managed.get_ppn(*frame_idx_counter), dir_flags);
-            frame_idx_recorder[entry_id] = *frame_idx_counter as u16;
-            if idx1 != 0 {
-                fill_linear_ptable(
-                    &mut frames[*frame_idx_counter],
-                    0,
-                    PageNum::from_addr(page_addr_start),
-                    idx1,
-                    SV39Paging::PG_SIZE_L2,
-                    normal_flags,
-                );
-            }
-            fill_linear_ptable(
-                &mut frames[*frame_idx_counter],
-                idx1,
-                PageNum::from_addr(addr1),
-                idx2 - idx1,
-                SV39Paging::PG_SIZE_L2,
-                item_flags,
-            );
-            if idx2 != SV39Paging::PTABLE_ENTRY_COUNT {
-                fill_linear_ptable(
-                    &mut frames[*frame_idx_counter],
-                    idx2,
-                    PageNum::from_addr(addr2),
-                    SV39Paging::PTABLE_ENTRY_COUNT - idx2,
-                    SV39Paging::PG_SIZE_L2,
-                    normal_flags,
-                );
-            }
-            *frame_idx_counter += 1;
-        }
+    let flat_st = PageNum::from_addr(SV39Paging::KERNEL_OFFSET);
+    let flat_ed = PageNum::from_addr(SV39Paging::MMIO_OFFSET);
+    table
+        .map(
+            flat_st,
+            flat_ed - flat_st,
+            PageNum::from_value(0),
+            PageTableFlags::RW,
+            true,
+        )
+        .unwrap_or_else(|err| {
+            panic!("Unable to set up the kernel page table: {:?}", err);
+        });
+    for (section, rwx_flags) in sections {
+        let st = PageNum::from_addr(section.start);
+        let ed = PageNum::from_addr(section.start + section.length);
+        table
+            .map(st.physical_to_kernel(), ed - st, st, rwx_flags, true)
+            .unwrap_or_else(|err| {
+                panic!("Unable to set up the kernel page table: {:?}", err);
+            });
     }
-
-    let mut idx = 1;
-
-    for secinfo in sec_perms {
-        let sec = secinfo.0;
-        if sec.length == 0 {
-            continue;
-        }
-        let perm = secinfo.1;
-        let start = sec.start;
-        let end = sec.start + sec.length;
-        let s_aligned = start.align_down(SV39Paging::PG_SIZE_L1);
-        let e_aligned = end.align_down(SV39Paging::PG_SIZE_L1);
-        if s_aligned == e_aligned {
-            // single page
-            fill_sec(
-                &frames_managed,
-                &mut frame_indexies,
-                &mut idx,
-                kpage_start,
-                start,
-                s_aligned,
-                end,
-                baseflags | perm,
-                dirflags,
-                normal_flags,
-            );
-        } else {
-            // cross pages
-            if start != s_aligned {
-                // first page
-                fill_sec(
-                    &frames_managed,
-                    &mut frame_indexies,
-                    &mut idx,
-                    kpage_start,
-                    start,
-                    s_aligned,
-                    s_aligned + SV39Paging::PG_SIZE_L1,
-                    baseflags | perm,
-                    dirflags,
-                    normal_flags,
-                );
-            }
-            if end != e_aligned {
-                // last page
-                fill_sec(
-                    &frames_managed,
-                    &mut frame_indexies,
-                    &mut idx,
-                    kpage_start,
-                    e_aligned,
-                    e_aligned,
-                    end,
-                    baseflags | perm,
-                    dirflags,
-                    normal_flags,
-                );
-            }
-            let fill_st = ((start - kpage_start) >> SV39Paging::PG_WIDTH_L1) + 1;
-            let fill_ed = (end - kpage_start) >> SV39Paging::PG_WIDTH_L1;
-            for i in fill_st..fill_ed {
-                // middle pages
-                frames[0][i] = PageTableEntry::create(
-                    PageNum::from_addr(kpage_start + i * SV39Paging::PG_SIZE_L1),
-                    baseflags | perm,
-                );
-            }
-        }
+    unsafe {
+        satp::set(
+            satp::Mode::Sv39,
+            0,
+            table.table.table_frame.get_ppn().get_value(),
+        );
     }
-    frames_managed
+    KERNEL_ROOT_TABLE.call_once(|| table);
 }

@@ -6,6 +6,7 @@ pub struct SBITable;
 
 pub const CON_PUTCHR: (usize, usize) = (0x01, 0);
 //pub const CON_GETCHR: (usize, usize) = (0x02, 0);
+pub const SBI_SET_TIMER: (usize, usize) = (0x54494D45, 0);
 
 impl SBITrait for SBITable {
     fn console_putstr(str: &str) -> Result<(), usize> {
@@ -18,6 +19,12 @@ impl SBITrait for SBITable {
         Ok(())
     }
     fn init() {}
+}
+impl SBITable {
+    pub fn set_timer(time: usize) -> Result<(), usize> {
+        let res = sbi_call(SBI_SET_TIMER, time, 0, 0);
+        if res == 0 { Ok(()) } else { Err(res) }
+    }
 }
 
 #[inline(always)]

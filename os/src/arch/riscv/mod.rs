@@ -1,7 +1,6 @@
 //! Arch-specified functions for RISC-V
 
 pub mod mm;
-pub mod reg;
 mod sbi;
 pub mod trap;
 

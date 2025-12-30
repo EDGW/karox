@@ -9,15 +9,17 @@ use crate::{
 };
 extern crate alloc;
 
-pub mod utils;
 pub mod arch;
+pub mod devices;
 pub mod entry;
 pub mod error;
 pub mod mm;
 mod panic;
+pub mod sched;
+pub mod task;
+pub mod utils;
 #[macro_use]
 pub mod console;
-pub mod devices;
 
 /// The main function of the operating system
 pub fn rust_main(_hart_id: usize, dev_info: impl DeviceInfo) -> ! {
