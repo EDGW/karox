@@ -9,24 +9,20 @@
 
 use core::arch::naked_asm;
 
-use riscv::register::satp;
-
 use crate::{
     arch::{
+        KERNEL_OFFSET, PAGE_WIDTH,
         endian::EndianData,
-        mm::{
-            KERNEL_STACK,
-            config::{KERNEL_STACK_SHIFT, Paging},
-            paging::BOOT_PTABLE,
-        },
+        mm::{KERNEL_STACK, paging::BOOT_PTABLE},
         symbols::_ekernel,
     },
     devices::device_info::FdtTree,
     entry::shared::clear_bss,
     kserial_println,
-    mm::PagingMode,
+    mm::config::KERNEL_STACK_SHIFT,
     rust_main,
 };
+use riscv::register::satp;
 
 /// Boot `satp` register value
 ///
@@ -79,6 +75,7 @@ fn adjust_dtb(hart_id: usize, dtb_ptr: *const u8) -> ! {
 
 /// Build an early boot table and set up the stack, and jumping to [start]
 #[unsafe(naked)]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn setup(hart_id: usize, dtb_ptr: *const u8) -> ! {
     naked_asm!(
         // init boot ptable
@@ -114,8 +111,8 @@ unsafe extern "C" fn setup(hart_id: usize, dtb_ptr: *const u8) -> ! {
         //boot_stack_size  = const KERNEL_STACK_SIZE,
         boot_satp = const BOOT_SATP,
         boot_table_addr = sym BOOT_PTABLE,
-        page_width = const Paging::PAGE_WIDTH,
-        offset = const Paging::KERNEL_OFFSET,
+        page_width = const PAGE_WIDTH,
+        offset = const KERNEL_OFFSET,
         start = sym start,
     )
 }
@@ -124,7 +121,6 @@ unsafe extern "C" fn setup(hart_id: usize, dtb_ptr: *const u8) -> ! {
 fn start(hart_id: usize, dtb_ptr: usize) -> ! {
     clear_bss();
     kserial_println!("karox entry for RISC-V architecture.");
-    kserial_println!("Kernel running on hart #{:#x}", hart_id);
     let dtree = FdtTree::from_ptr(dtb_ptr as *const u8);
     rust_main(hart_id, dtree);
 }

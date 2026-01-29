@@ -4,7 +4,8 @@ export CUR	:= $(shell pwd)
 
 all: $(ALL_BUILDS)
 
-build: $(DEFAULT_BUILD)
+build: 
+	make $(DEFAULT_BUILD)
 
 run:
 	make -f build.mak run BUILD_NAME=$(DEFAULT_BUILD)

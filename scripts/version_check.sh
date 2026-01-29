@@ -1,3 +1,5 @@
+# Usage: version_check.sh MIN_VERSION CURRENT_VERSION
+
 ver=$(echo -e "$1\n$2" | sort -V | head -n1)
 
 if [ "$ver" != "$1" ];then

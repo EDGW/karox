@@ -1,0 +1,36 @@
+//! Uniprocessor interior mutability primitives
+use core::{cell::{RefCell, RefMut}, fmt::Debug};
+
+/// Wrap a static data structure inside it so that we are
+/// able to access it without any `unsafe`.
+///
+/// We should only use it in uniprocessor.
+///
+/// In order to get mutable reference of inner data, call
+/// `exclusive_access`.
+pub struct UPSafeCell<T> {
+    /// inner data
+    inner: RefCell<T>,
+}
+
+unsafe impl<T> Sync for UPSafeCell<T> {}
+
+impl<T> UPSafeCell<T> {
+    /// User is responsible to guarantee that inner struct is only used in
+    /// uniprocessor.
+    pub const unsafe fn new(value: T) -> Self {
+        Self {
+            inner: RefCell::new(value),
+        }
+    }
+    /// Exclusive access inner data in UPSafeCell. Panic if the data has been borrowed.
+    pub unsafe fn exclusive_access(&self) -> RefMut<'_, T> {
+        self.inner.borrow_mut()
+    }
+}
+
+impl<T:Debug> Debug for UPSafeCell<T>{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("UPSafeCell").field("inner", &self.inner).finish()
+    }
+}

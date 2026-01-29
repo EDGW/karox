@@ -1,13 +1,12 @@
 //! Stack-based Frame Allocator with Recyclation
 #![allow(unused)]
 
-use alloc::{vec, vec::Vec};
-
 use crate::{
-    arch::mm::{config::Paging, paging::PageNum},
-    mm::{PagingMode, frame::FrameAllocator},
-    utils::range::Range,
+    arch::mm::PageNum,
+    mm::{config::PAGE_SIZE, frame::FrameAllocator},
 };
+use alloc::{vec, vec::Vec};
+use core::ops::Range;
 /// Stack-based frame allocator using free ranges and recycled pages.
 pub struct StackFrameAllocator {
     /// Available memory ranges.
@@ -31,18 +30,18 @@ impl StackFrameAllocator {
 impl FrameAllocator for StackFrameAllocator {
     fn add_frame(&mut self, general_mem: crate::devices::device_info::MemoryAreaInfo) {
         self.free.push(Range {
-            start: general_mem.start / Paging::PAGE_SIZE,
-            length: general_mem.length / Paging::PAGE_SIZE,
+            start: general_mem.start / PAGE_SIZE,
+            end: general_mem.end / PAGE_SIZE,
         });
     }
 
-    unsafe fn try_alloc(&mut self, count: usize) -> Option<crate::arch::mm::paging::PageNum> {
+    unsafe fn alloc(&mut self, count: usize) -> Option<PageNum> {
         if count > 1 {
             if self.allow_contiguous {
                 for r in &mut self.free {
-                    if r.length > count {
-                        r.length -= count;
-                        return Some(PageNum::from_value(r.start + r.length));
+                    if r.len() > count {
+                        r.end -= count;
+                        return Some(PageNum::from(r.end));
                     }
                 }
                 None
@@ -51,12 +50,12 @@ impl FrameAllocator for StackFrameAllocator {
             }
         } else {
             if let Some(ppn) = self.recycled.pop() {
-                Some(PageNum::from_value(ppn))
+                Some(PageNum::from(ppn))
             } else {
                 for r in &mut self.free {
-                    if r.length > 1 {
-                        r.length -= 1;
-                        return Some(PageNum::from_value(r.start + r.length));
+                    if r.len() > 1 {
+                        r.end -= 1;
+                        return Some(PageNum::from(r.end));
                     }
                 }
                 None
@@ -64,8 +63,10 @@ impl FrameAllocator for StackFrameAllocator {
         }
     }
 
-    unsafe fn decalloc(&mut self, ppn: crate::arch::mm::paging::PageNum, count: usize) {
-        for i in ppn.get_value()..(ppn.get_value() + count) {
+    unsafe fn dealloc(&mut self, ppn: PageNum, count: usize) {
+        let st: usize = ppn.into();
+        let ed = st + count;
+        for i in st..ed {
             self.recycled.push(i);
         }
     }

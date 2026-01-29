@@ -1,4 +1,4 @@
-use core::{any::type_name, fmt::Debug, usize};
+use core::{any::type_name, fmt::Debug, ops::Range, usize};
 
 use alloc::{boxed::Box, slice, vec, vec::Vec};
 use spin::rwlock::RwLock;
@@ -6,14 +6,12 @@ use spin::rwlock::RwLock;
 use crate::{
     arch::{
         endian::EndianData,
-        mm::config::Paging,
         symbols::{_ekernel, _skernel},
     },
     devices::device_info::{DeviceInfo, MemoryAreaInfo},
-    error::MessageError,
-    mm::PagingMode,
+    mm::config::PAGE_SIZE,
     phys_addr_from_kernel,
-    utils::{num::AlignableTo, range::Range},
+    utils::{num::AlignableTo, range::RangeExt},
 };
 
 /// Cell width descriptor
@@ -86,7 +84,7 @@ impl DeviceNode {
 
             res.push(Range::<usize> {
                 start: addr,
-                length: sz,
+                end: sz + addr,
             });
         }
         Ok(res)
@@ -261,17 +259,17 @@ pub trait DeviceTree: DeviceInfo {
             .iter()
             .for_each(|reg| {
                 let mut result = Vec::new();
-                result.push(*reg);
+                result.push(reg.clone());
                 let mut temp = Vec::new();
                 // In most common senses, there are only a few regs in memory map and reservation map,
                 // so directly enumerating them is quicker
                 for rsv_area in reserved {
                     for r in &result {
-                        let areas = *r - *rsv_area;
-                        if let Some(area) = areas[0] {
+                        let areas = r.sub(rsv_area);
+                        if let Some(area) = areas[0].clone() {
                             temp.push(area);
                         }
-                        if let Some(area) = areas[1] {
+                        if let Some(area) = areas[1].clone() {
                             temp.push(area);
                         }
                     }
@@ -281,7 +279,7 @@ pub trait DeviceTree: DeviceInfo {
                 for item in result {
                     res.push(MemoryAreaInfo {
                         start: item.start,
-                        length: item.length,
+                        end: item.end,
                     });
                 }
             });
@@ -310,10 +308,10 @@ pub trait DeviceTree: DeviceInfo {
         }
 
         // add kernel page
-        rsvs.push(Range::from_points(
-            phys_addr_from_kernel!(_skernel).align_down(Paging::PAGE_SIZE),
-            phys_addr_from_kernel!(_ekernel).align_up(Paging::PAGE_SIZE),
-        ));
+        rsvs.push(Range {
+            start: phys_addr_from_kernel!(_skernel).align_down(PAGE_SIZE),
+            end: phys_addr_from_kernel!(_ekernel).align_up(PAGE_SIZE),
+        });
 
         // calculate memory area
         let mem_area =
@@ -373,7 +371,6 @@ pub enum DeviceTreeError {
     /// Device tree parsing or initialization has not been performed yet.
     NotInitializedError,
 }
-impl MessageError for DeviceTreeError {}
 
 #[derive(Debug)]
 pub enum InvalidPropFormatError {

@@ -1,22 +1,24 @@
 //! This module provides functionalities to resolve a flattened device tree
 
-use core::str::{self, Utf8Error};
+use core::{
+    ops::Range,
+    str::{self, Utf8Error},
+};
 
 use alloc::{boxed::Box, slice, string::String, vec::Vec};
 use bitflags::bitflags;
 use spin::{once::Once, rwlock::RwLock};
 
 use crate::{
-    arch::{
-        endian::{BigEndian32, BigEndian64, EndianData},
-        mm::config::Paging,
-    }, devices::device_info::{
+    arch::endian::{BigEndian32, BigEndian64, EndianData},
+    devices::device_info::{
         DeviceInfo, MemoryAreaInfo,
         device_tree::{DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo},
-    }, error::MessageError, kserial_print, mm::PagingMode, utils::{num::AlignableTo, range::Range}
+    },
+    kserial_print,
+    mm::config::PAGE_SIZE,
+    utils::num::AlignableTo,
 };
-
-const PAGE_SIZE: usize = Paging::PAGE_SIZE;
 
 /// Parser and holder for a Flattened Device Tree (FDT) blob.
 ///
@@ -413,7 +415,7 @@ impl DeviceTree for FdtTree {
         // self
         let self_range = Range {
             start: (self.fdt_ptr as usize).align_down(PAGE_SIZE),
-            length: (header.totalsize.value() as usize).align_up(PAGE_SIZE),
+            end: (self.fdt_ptr as usize + header.totalsize.value() as usize).align_up(PAGE_SIZE),
         };
 
         // enumerate
@@ -422,16 +424,9 @@ impl DeviceTree for FdtTree {
             let mut addr = block.addr.value() as usize;
             let mut size = block.size.value() as usize;
             while addr != 0 || size != 0 {
-                let m1 = addr % PAGE_SIZE;
-                let m2 = size % PAGE_SIZE;
-                addr -= m1;
-                if m2 != 0 {
-                    size += PAGE_SIZE as usize - m2;
-                }
-
                 res.push(Range {
-                    start: addr,
-                    length: size,
+                    start: addr.align_down(PAGE_SIZE),
+                    end: (size + addr).align_up(PAGE_SIZE),
                 });
 
                 ptr = ptr.add(1);
@@ -475,5 +470,3 @@ pub enum FdtError {
         ptr: *const u8,
     },
 }
-
-impl MessageError for FdtError {}

@@ -5,3 +5,5 @@
 /bin/
 /exclude/
 /runtime/
+name_rules
+/.VSCodeCounter/

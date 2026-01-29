@@ -14,3 +14,7 @@ Make sure you have a rust `nightly` version enabled, and targets `riscv64gc-unkn
 - `make clean` Clean the workspace
 
 Build properties are configured in `config.mak`.
+
+# Debug
+
+Make sure you have a qemu version greater than 9.0.50.

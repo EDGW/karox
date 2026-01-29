@@ -1,77 +1,52 @@
-//! Frame management.
+//! # Frame(Physical Pages) Management.
 //!
-//! Provides frame allocators, managed frame wrappers, and initialization
-//! helpers for physical memory frames.
-
-use core::slice::Iter;
+//! [FrameAllocator] is the trait for frame allocators, but it's not safe.
+//! It's recommended to use [LockedFrameAllocator], a thread-safe and memory-safe wrapper around any [FrameAllocator] implementation.
 
 use crate::{
-    arch::mm::{config::Paging, paging::PageNum},
+    arch::{MAX_PHYS_ADDR, mm::PageNum},
     devices::device_info::MemoryAreaInfo,
     kserial_println,
-    mm::PagingMode,
 };
-use alloc::{slice, vec, vec::Vec};
+use alloc::{vec, vec::Vec};
+use core::ops::Range;
 use spin::{Mutex, MutexGuard};
 
 mod buddy;
+mod managed;
 mod stack;
+pub use managed::*;
 // region: FrameAllocator traits
 
-/// Trait for frame allocation.
-///
-/// Implementors provide methods to add available memory areas and to
-/// allocate/deallocate physical frames represented by [PageNum].
+/// Trait for frame allocators that is **not promised to be safe.**
 pub trait FrameAllocator: Send {
-    /// Add a memory area to the allocator.
+    /// Add a memory area as available frames.
+    fn add_frame(&mut self, mem_area: MemoryAreaInfo);
+
+    /// Allocate **contiguous** frames.
+    /// The function is **unsafe** because unfreed frames may lead to memory leaks.
     ///
-    /// The supplied [MemoryAreaInfo] will be used as available physical pages.
-    fn add_frame(&mut self, general_mem: MemoryAreaInfo);
+    /// Use safe allocation functions like
+    /// [FrameAllocator::alloc_managed], [FrameAllocator::alloc_multiple_managed],
+    /// or [FrameAllocator::alloc_range_managed] instead.
+    unsafe fn alloc(&mut self, count: usize) -> Option<PageNum>;
 
-    /// Try to allocate `count` contiguous frames, returning the first [PageNum] on success.
-    unsafe fn try_alloc(&mut self, count: usize) -> Option<PageNum>;
-
-    /// Deallocate `count` frames starting at `ppn`.
-    unsafe fn decalloc(&mut self, ppn: PageNum, count: usize);
-
-    /// Allocate a single managed frame and return a [ManagedFrame].
-    #[inline(always)]
-    fn alloc_managed(&mut self) -> Result<ManagedFrame, FrameAllocatorError> {
-        match unsafe { self.try_alloc(1) } {
-            Some(ppn) => unsafe { Ok(ManagedFrame::new(ppn)) },
-            None => Err(FrameAllocatorError::OutOfMemory),
-        }
-    }
-    /// Allocate `count` non-contiguous frames and return them as [ManagedFrames].
-    #[inline(always)]
-    fn alloc_multiple_managed(
-        &mut self,
-        count: usize,
-    ) -> Result<ManagedFrames, FrameAllocatorError> {
-        let mut res = vec![];
-        for _ in 0..count {
-            match unsafe { self.try_alloc(1) } {
-                Some(ppn) => res.push(ppn),
-                None => {
-                    return Err(FrameAllocatorError::OutOfMemory);
-                }
-            }
-        }
-        Ok(ManagedFrames::new(
-            res.iter()
-                .map(|ppn| unsafe { ManagedFrame::new(*ppn) })
-                .collect(),
-        ))
-    }
+    /// Deallocate contiguous frames.
+    /// **The number must be exactly the same as allocated before, otherwise undefined behavior may occur.**
+    ///
+    /// Use managed objects like [Frame], [Frames], or [FrameRange] to avoid directly deallocating.
+    unsafe fn dealloc(&mut self, ppn: PageNum, count: usize);
 }
 
-/// A thread-safe wrapper around a [FrameAllocator].
+/// Thread-safe wrapper around a [FrameAllocator].
+/// `alloc_managed`, `alloc_multiple_managed`, and `alloc_range_managed` are provided for safe allocation.
+///
+/// For unsafe operations, use [LockedFrameAllocator::lock] to get a mutex guard to the internal allocator.
 pub struct LockedFrameAllocator<TAlloc: FrameAllocator> {
     alloc: Mutex<TAlloc>,
 }
-
 impl<TAlloc: FrameAllocator> LockedFrameAllocator<TAlloc> {
-    /// Create a new locked allocator from a concrete [FrameAllocator].
+    /// Create a new locked allocator.
     #[inline(always)]
     pub const fn new(alloc: TAlloc) -> LockedFrameAllocator<TAlloc> {
         LockedFrameAllocator {
@@ -80,178 +55,88 @@ impl<TAlloc: FrameAllocator> LockedFrameAllocator<TAlloc> {
     }
     /// Manually acquire the internal lock and get a guard to the allocator.
     #[inline(always)]
-    pub fn manually_lock(&self) -> MutexGuard<'_, TAlloc> {
+    pub fn lock(&self) -> MutexGuard<'_, TAlloc> {
         self.alloc.lock()
     }
-}
 
-impl<TAlloc: FrameAllocator> LockedFrameAllocator<TAlloc> {
-    /// Allocate a single managed frame using the inner allocator.
-    pub fn alloc_managed(&self) -> Result<ManagedFrame, FrameAllocatorError> {
-        self.alloc.lock().alloc_managed()
-    }
-    /// Allocate `count` non-contiguous frames and using the inner allocator.
+    /// Allocate a single frame safely.
     #[inline(always)]
-    pub fn alloc_multiple_managed(
-        &self,
-        count: usize,
-    ) -> Result<ManagedFrames, FrameAllocatorError> {
-        self.alloc.lock().alloc_multiple_managed(count)
+    pub fn alloc_managed(&self) -> Result<Frame, FrameAllocatorError> {
+        match unsafe { self.lock().alloc(1) } {
+            Some(ppn) => unsafe { Ok(Frame::new(ppn)) },
+            None => Err(FrameAllocatorError::OutOfMemory),
+        }
+    }
+    /// Allocate multiple frames safely, **not guaranteed to be contiguous**.
+    #[inline(always)]
+    pub fn alloc_multiple_managed(&self, count: usize) -> Result<FrameSet, FrameAllocatorError> {
+        // using binary trials has no benifits here, so we only try once.
+        let mut guard = self.lock();
+        // try
+        if let Some(ppn) = unsafe { guard.alloc(count) } {
+            return Ok(unsafe {
+                FrameSet::from_pn(Range {
+                    start: ppn,
+                    end: ppn + count,
+                })
+            });
+        }
+        // alloc
+        let mut res = vec![];
+        for _ in 0..count {
+            match unsafe { guard.alloc(1) } {
+                Some(ppn) => res.push(ppn),
+                None => {
+                    return Err(FrameAllocatorError::OutOfMemory);
+                }
+            }
+        }
+        Ok(unsafe { FrameSet::from_pn(res) })
+    }
+    /// Allocate contiguous frames safely.
+    pub fn alloc_range_managed(&self, count: usize) -> Result<FrameRange, FrameAllocatorError> {
+        match unsafe { self.lock().alloc(count) } {
+            Some(first) => unsafe { Ok(FrameRange::new(first, count)) },
+            None => Err(FrameAllocatorError::OutOfMemory),
+        }
     }
 }
 
-/// Errors produced by frame allocators.
+/// Frame allocator errors.
 #[derive(Debug)]
 pub enum FrameAllocatorError {
-    /// No memory left to satisfy allocation requests.
     OutOfMemory,
-}
-// endregion
-
-// region: ManagedFrames
-/// A managed physical frame.
-///
-/// The frame is automatically returned to the global allocator when dropped.
-pub struct ManagedFrame {
-    ppn: PageNum,
-}
-
-impl<'a> Drop for ManagedFrame {
-    /// Return the frame to the global allocator on drop.
-    fn drop(&mut self) {
-        unsafe {
-            FRAME_ALLOC.manually_lock().decalloc(self.ppn, 1);
-        }
-    }
-}
-
-impl ManagedFrame {
-    /// Create a new [ManagedFrame] from a [PageNum].
-    pub unsafe fn new(ppn: PageNum) -> ManagedFrame {
-        ManagedFrame { ppn }
-    }
-
-    /// Return a kernel-space pointer to the start of this frame.
-    pub unsafe fn get_kernel_ptr(&self) -> *mut u8 {
-        self.ppn.physical_to_kernel().get_base_addr() as *mut u8
-    }
-
-    /// Get a mutable reference to the frame memory as [T].
-    pub unsafe fn get_ref<'b, T>(&'b self) -> &'b mut T {
-        unsafe {
-            let ptr = self.get_kernel_ptr();
-            &mut *(ptr as *mut T)
-        }
-    }
-
-    /// Get a mutable pointer to the frame memory as [T].
-    pub unsafe fn get_ptr<T>(&self) -> *mut T {
-        unsafe {
-            let ptr = self.get_kernel_ptr();
-            ptr as *mut T
-        }
-    }
-
-    /// Get a mutable slice view of the frame memory as [T] with `count` elements.
-    pub unsafe fn get_as_arr<'b, T>(&'b self, count: usize) -> &'b mut [T] {
-        unsafe {
-            let ptr = self.get_kernel_ptr() as *mut T;
-            slice::from_raw_parts_mut(ptr, count)
-        }
-    }
-
-    /// Return the [PageNum] backing this frame.
-    pub fn get_ppn(&self) -> PageNum {
-        self.ppn
-    }
-}
-
-/// A collection of non-contiguous managed frames.
-pub struct ManagedFrames {
-    frames: Vec<ManagedFrame>,
-}
-
-impl ManagedFrames {
-    /// Create a new [ManagedFrames] from a vector of [ManagedFrame].
-    pub fn new(frames: Vec<ManagedFrame>) -> ManagedFrames {
-        ManagedFrames { frames: frames }
-    }
-
-    /// Return the number of frames in the collection.
-    pub fn get_count(&self) -> usize {
-        self.frames.len()
-    }
-    /// Return a kernel-space pointer to the frame at `index`.
-    pub unsafe fn get_kernel_ptr(&self, index: usize) -> *mut u8 {
-        unsafe {
-            let frame = &self.frames[index];
-            frame.get_kernel_ptr()
-        }
-    }
-
-    /// Get a mutable reference to the frame at `index` as [T].
-    pub unsafe fn get_ref<'a, T>(&'a self, index: usize) -> &'a mut T {
-        unsafe {
-            let frame = &self.frames[index];
-            frame.get_ref()
-        }
-    }
-
-    /// Get a mutable pointer to the frame at `index` as [T].
-    pub unsafe fn get_ptr<'a, T>(&'a self, index: usize) -> *mut T {
-        unsafe {
-            let frame = &self.frames[index];
-            frame.get_ptr()
-        }
-    }
-
-    /// Get the [PageNum] of the frame at `index`.
-    pub fn get_ppn(&self, index: usize) -> PageNum {
-        let frame = &self.frames[index];
-        frame.get_ppn()
-    }
-    /// Add a [ManagedFrame] into the collection.
-    pub fn add_frame(&mut self, frame: ManagedFrame) {
-        self.frames.push(frame);
-    }
-
-    /// Iterate over all managed frames.
-    pub fn iter(&self) -> Iter<'_, ManagedFrame> {
-        self.frames.iter()
-    }
 }
 // endregion
 
 // region: Allocator
 
-/// Default [FrameAllocator] type alias.
+/// Default [FrameAllocator].
 pub type DefaultFrameAllocator = buddy::BuddyFrameAllocator;
 
-/// Global frame allocator instance.
+/// Global allocator instance.
 pub static FRAME_ALLOC: LockedFrameAllocator<DefaultFrameAllocator> =
     LockedFrameAllocator::new(DefaultFrameAllocator::new());
 
-/// Initialize the global frame allocator from a list of memory areas.
-///
-/// Areas that exceed [Paging]::MAX_PHYSICAL_ADDR are trimmed or ignored.
-pub fn init_frames(general_mem: &Vec<MemoryAreaInfo>) {
+/// Initialize global allocator from memory areas (trim areas exceeding [Paging::MAX_PHYSICAL_ADDR]).
+pub fn init(general_mem: &Vec<MemoryAreaInfo>) {
     for area in general_mem {
-        let mut guard = FRAME_ALLOC.manually_lock();
+        let mut guard = FRAME_ALLOC.lock();
         let start = area.start;
-        let end = area.start + area.length;
-        let max_addr = Paging::MAX_PHYSICAL_ADDR;
+        let end = area.end;
+        let max_addr = MAX_PHYS_ADDR;
         if end <= max_addr {
-            guard.add_frame(*area);
+            guard.add_frame(area.clone());
         } else if start <= max_addr && end > max_addr {
             guard.add_frame(MemoryAreaInfo {
                 start,
-                length: max_addr - start,
+                end: max_addr,
             });
             kserial_println!(
                 "Ignored unreachable memory area {:?}",
                 MemoryAreaInfo {
                     start: max_addr,
-                    length: end - max_addr
+                    end: end
                 }
             );
         } else {

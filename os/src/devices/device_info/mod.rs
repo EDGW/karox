@@ -1,17 +1,17 @@
 //! This module defines an abstraction to describe the device struct of the system
 mod device_tree;
 mod fdt;
+use core::{fmt::Debug, ops::Range};
+
 use alloc::vec::Vec;
 pub use fdt::FdtTree;
-
-use crate::{error::MessageError, utils::range::Range};
 
 pub type MemoryAreaInfo = Range<usize>;
 
 /// An abstraction to describe the device struct of the system
 pub trait DeviceInfo {
     /// The error type the resolver would throw when encountered with errors
-    type TError: MessageError;
+    type TError: Debug;
 
     /// Initialize the device tree
     fn init(&self) -> Result<(), Self::TError>;

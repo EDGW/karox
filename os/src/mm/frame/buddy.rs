@@ -5,7 +5,8 @@
 #![allow(unused)]
 
 use crate::{
-    arch::mm::paging::PageNum, devices::device_info::MemoryAreaInfo, kserial_println, mm::frame::FrameAllocator
+    arch::mm::PageNum, devices::device_info::MemoryAreaInfo, kserial_println,
+    mm::frame::FrameAllocator,
 };
 
 /// Maximum order for the buddy system.
@@ -27,15 +28,15 @@ impl BuddyFrameAllocator {
 }
 
 impl FrameAllocator for BuddyFrameAllocator {
-    unsafe fn try_alloc(&mut self, count: usize) -> Option<PageNum> {
-        self.inner.alloc(count).map(PageNum::from_value)
+    unsafe fn alloc(&mut self, count: usize) -> Option<PageNum> {
+        self.inner.alloc(count).map(PageNum::from)
     }
-    unsafe fn decalloc(&mut self, ppn: PageNum, count: usize) {
-        self.inner.dealloc(ppn.get_value(), count);
+    unsafe fn dealloc(&mut self, ppn: PageNum, count: usize) {
+        self.inner.dealloc(ppn.into(), count);
     }
     fn add_frame(&mut self, general_mem: MemoryAreaInfo) {
         let start = PageNum::from_addr(general_mem.start);
-        let end = PageNum::from_addr(general_mem.start + general_mem.length);
-        self.inner.add_frame(start.get_value(), end.get_value());
+        let end = PageNum::from_addr(general_mem.end);
+        self.inner.add_frame(start.into(), end.into());
     }
 }

@@ -1,9 +1,13 @@
 //! Memory management for risc-v architecture
 
-use crate::arch::mm::config::{KERNEL_STACK_SIZE, MAX_HARTS};
-pub mod config;
 pub mod paging;
+pub mod sv;
+
+mod types;
+pub use types::*;
+
+use crate::{arch::MAX_HARTS, mm::stack::RawKernelStack};
 
 /// The kernel stack
 #[unsafe(link_section = ".bss.stack")]
-pub static KERNEL_STACK: [[u8; KERNEL_STACK_SIZE]; MAX_HARTS] = [[0; KERNEL_STACK_SIZE]; MAX_HARTS];
+pub static KERNEL_STACK: [RawKernelStack; MAX_HARTS] = [RawKernelStack::new(); MAX_HARTS];

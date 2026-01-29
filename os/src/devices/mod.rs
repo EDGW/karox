@@ -1,23 +1,26 @@
 //! This module contains drivers and management methods for physical devices
 
 use crate::{
-    arch::{symbols::{_ekernel, _skernel}, trap}, devices::device_info::DeviceInfo, kserial_println, mm
+    arch::{
+        symbols::{_ekernel, _skernel}, //trap,
+    },
+    devices::device_info::DeviceInfo,
+    kserial_println,
 };
 
 pub mod device_info;
 pub mod mmio;
 pub mod serial;
 
-/// Initialize devices
-pub fn init(dev_info: impl DeviceInfo) {
-    kserial_println!("Initializing devices...");
+/// Load devices
+pub fn load_devs(dev_info: &impl DeviceInfo) {
+    kserial_println!("Loading devices...");
     if let Err(err) = dev_info.init() {
-        panic!("Initializing device info failed {:?}", err);
+        panic!("Loading device info failed {:?}", err);
     }
-    print_mem_info(&dev_info);
-    mm::init_memory(dev_info.get_mem_info().unwrap());
-    trap::init_trap();
-    kserial_println!("All Devices Initialized.");
+    #[cfg(debug_assertions)]
+    print_mem_info(dev_info);
+    kserial_println!("All Devices Loaded.");
 }
 
 /// Print Memory Info
@@ -26,8 +29,8 @@ pub fn print_mem_info(dev_info: &impl DeviceInfo) {
     kserial_println!("General Memories:");
     let mut tot_size = 0;
     for sec in mem_info {
-        kserial_println!("\t{:} (about {:} MBytes)", sec, sec.length / 1024 / 1024);
-        tot_size += sec.length;
+        kserial_println!("\t{:?} (about {:} MBytes)", sec, sec.len() / 1024 / 1024);
+        tot_size += sec.len();
     }
     let k_start = _skernel as *const u8 as usize;
     let k_end = _ekernel as *const u8 as usize;
