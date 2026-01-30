@@ -4,12 +4,12 @@ use crate::{
     arch::hart::get_hart_info,
     kserial_println,
     sched::Scheduler,
-    task::{scheduler::SCHEDULERS, task::Task},
+    task::{get_current_task, scheduler::SCHEDULERS, task::Task},
 };
 
 pub fn add_test_tasks() {
     unsafe {
-        for _ in 1..20 {
+        for _ in 0..20 {
             add_to_current(test_fn as *const ());
         }
     }
@@ -26,6 +26,10 @@ static COUNTER: AtomicUsize = AtomicUsize::new(1);
 pub fn test_fn() -> ! {
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
     loop {
-        kserial_println!("[Test Function {:}]", id);
+        kserial_println!(
+            "[Test Function {:} from task(tid #{:})]",
+            id,
+            get_current_task().get_tid()
+        );
     }
 }
