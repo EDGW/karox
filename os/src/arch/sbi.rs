@@ -2,6 +2,6 @@
 #![allow(missing_docs)]
 
 pub trait SBITrait {
-    fn console_putstr(c: &str) -> Result<(), usize>;
+    fn console_putchr(c: char) -> Result<(), usize>;
     fn init();
 }

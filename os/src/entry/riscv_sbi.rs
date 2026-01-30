@@ -18,7 +18,6 @@ use crate::{
     },
     devices::device_info::FdtTree,
     entry::shared::clear_bss,
-    kserial_println,
     mm::config::KERNEL_STACK_SHIFT,
     rust_main,
 };
@@ -120,7 +119,6 @@ unsafe extern "C" fn setup(hart_id: usize, dtb_ptr: *const u8) -> ! {
 /// Step 2
 fn start(hart_id: usize, dtb_ptr: usize) -> ! {
     clear_bss();
-    kserial_println!("karox entry for RISC-V architecture.");
     let dtree = FdtTree::from_ptr(dtb_ptr as *const u8);
     rust_main(hart_id, dtree);
 }

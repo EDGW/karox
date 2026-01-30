@@ -1,17 +1,18 @@
 use crate::{
     arch::{MAX_HARTS, hart::get_hart_info, task::switch::__switch},
-    kserial_println,
     sched::{DefaultScheduler, Scheduler},
     sync::UPSafeCell,
     task::{
         get_current_sched_context, get_current_sched_context_mut, get_current_task,
-        hart::HART_INFO, task::Task,
+        hart::HART_INFO, scheduler::test::add_test_tasks,
     },
 };
-use alloc::sync::Arc;
 use core::array;
 use lazy_static::lazy_static;
 use riscv::register::sscratch;
+
+#[path = "test.rs"]
+pub mod test;
 
 lazy_static! {
     static ref SCHEDULERS: [UPSafeCell<DefaultScheduler>; MAX_HARTS] =
@@ -20,49 +21,33 @@ lazy_static! {
 
 pub fn run_tasks() -> ! {
     let hart_info = get_hart_info();
-
-    // test 1
-    add_to_current(Task::new_kernel_from_entry(test_fn_1 as *const (), hart_info.hart_id).unwrap());
-    // test 2
-    add_to_current(Task::new_kernel_from_entry(test_fn_2 as *const (), hart_info.hart_id).unwrap());
-
+    add_test_tasks();
     loop {
         unsafe {
             let task = SCHEDULERS[hart_info.hart_id].exclusive_access().fetch_new();
             HART_INFO[hart_info.hart_id]
                 .inner
                 .exclusive_access()
-                .running_task
-                .write(task.clone());
+                .running_task = Some(task.clone());
             let cur_context = get_current_sched_context_mut();
             let next_context = task.get_task_context_ptr();
-            sscratch::write(task.get_trap_context_ptr() as usize);
+            sscratch::write(task.get_trap_context_ptr() as usize); // set sscratch
             __switch(cur_context, next_context);
         }
     }
 }
 
-pub fn add_to_current(task: Arc<Task>) {
-    unsafe { SCHEDULERS[get_hart_info().hart_id].exclusive_access() }.add_to_ready(task);
-}
-
+/// Schedule. **Make sure interrupt is disabled before call the scheduler**
 pub fn schedule() {
+    let hart_info = get_hart_info();
+    if !hart_info.preempt.is_preempt_allowed() {
+        hart_info.preempt.need_reschedule();
+        return;
+    }
     let tsk_info = get_current_task();
     unsafe {
         let cur = tsk_info.get_task_context_mut_ptr();
         let next = get_current_sched_context();
         __switch(cur, next);
-    }
-}
-
-pub fn test_fn_1() -> ! {
-    loop {
-        kserial_println!("When I was Yound I listen to the radio waiting.");
-    }
-}
-
-pub fn test_fn_2() -> ! {
-    loop {
-        kserial_println!("for my favirote song. And So I lalalalalalalala.");
     }
 }

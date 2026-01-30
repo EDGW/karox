@@ -1,20 +1,32 @@
 // TODO: Temporarily Used
 #![allow(missing_docs)]
 
+use crate::{
+    arch::{SBITable, SBITrait},
+    mutex::NoPreemptSpinLock,
+};
 use core::fmt::{Arguments, Error, Write};
 
-use crate::arch::{SBITable, SBITrait};
+static CON_LOCK: NoPreemptSpinLock<()> = NoPreemptSpinLock::new(());
 
 struct SerialOut;
 
 impl Write for SerialOut {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        SBITable::console_putstr(s).map_err(|_| Error)?;
+        for c in s.as_bytes() {
+            SBITable::console_putchr(*c as char).map_err(|_| Error)?;
+        }
         Ok(())
     }
 }
 
 pub fn serial_print(args: Arguments) {
+    let guard = CON_LOCK.lock();
+    SerialOut.write_fmt(args).unwrap();
+    drop(guard);
+}
+
+pub unsafe fn serial_print_unsafe(args: Arguments) {
     SerialOut.write_fmt(args).unwrap();
 }
 
@@ -30,5 +42,20 @@ macro_rules! kserial_print {
 macro_rules! kserial_println {
     ($fmt: literal $(, $($arg: tt)+)?) => {
         $crate::console::serial_print(format_args!(concat!($fmt, "\r\n") $(, $($arg)+)?))   // Use CR-LF to adapt to QEMU
+    }
+}
+
+#[macro_export]
+/// print string macro
+macro_rules! kserial_print_unsafe {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        $crate::console::serial_print_unsafe(format_args!($fmt $(, $($arg)+)?))
+    }
+}
+
+#[macro_export]
+macro_rules! kserial_println_unsafe {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        $crate::console::serial_print_unsafe(format_args!(concat!($fmt, "\r\n") $(, $($arg)+)?))   // Use CR-LF to adapt to QEMU
     }
 }

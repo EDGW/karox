@@ -1,5 +1,6 @@
 use alloc::{vec, vec::Vec};
-use spin::Mutex;
+
+use crate::mutex::NoPreemptSpinLock;
 
 pub struct TaskIdAllocator {
     current: usize,
@@ -54,7 +55,7 @@ impl Drop for TaskId {
     }
 }
 
-pub static TID_ALLOC: Mutex<TaskIdAllocator> = Mutex::new(TaskIdAllocator::new());
+pub static TID_ALLOC: NoPreemptSpinLock<TaskIdAllocator> = NoPreemptSpinLock::new(TaskIdAllocator::new());
 
 pub fn alloc_tid() -> TaskId {
     TaskId {

@@ -1,6 +1,5 @@
 use crate::arch::SBITrait;
 use core::arch::asm;
-use spin::Mutex;
 
 pub struct SBITable;
 
@@ -8,18 +7,12 @@ pub const CON_PUTCHR: (usize, usize) = (0x01, 0);
 //pub const CON_GETCHR: (usize, usize) = (0x02, 0);
 pub const SBI_SET_TIMER: (usize, usize) = (0x54494D45, 0);
 
-static LOCK: Mutex<()> = Mutex::new(());
-
 impl SBITrait for SBITable {
-    fn console_putstr(str: &str) -> Result<(), usize> {
-        let guard = LOCK.lock();
-        for c in str.as_bytes() {
-            let res = sbi_call(CON_PUTCHR, *c as usize, 0, 0);
-            if res != 0 {
-                return Err(res);
-            }
+    fn console_putchr(chr: char) -> Result<(), usize> {
+        let res = sbi_call(CON_PUTCHR, chr as usize, 0, 0);
+        if res != 0 {
+            return Err(res);
         }
-        drop(guard);
         Ok(())
     }
     fn init() {}

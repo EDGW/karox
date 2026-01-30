@@ -75,27 +75,37 @@ impl Task {
         Ok(res)
     }
 
-    /// Get the mutable task context ptr of this task. **This function is UP-Safe**
+    /// Get the mutable task context ptr of this task. 
+    /// **This function is UP-Safe and cannot be preempted. 
+    ///   Wrap the function in [super::preempt::disable_preempt()] and [super::preempt::restore_preempt()] if needed**
     pub unsafe fn get_task_context_ptr(&self) -> *const TaskContext {
-        unsafe { &self.inner.exclusive_access().task_context }
+        unsafe { &self.inner.access().task_context }
     }
 
-    /// Get the task context ptr of this task. **This function is UP-Safe**
+    /// Get the task context ptr of this task.
+    /// **This function is UP-Safe and cannot be preempted. 
+    ///   Wrap the function in [super::preempt::disable_preempt()] and [super::preempt::restore_preempt()] if needed**
     pub unsafe fn get_task_context_mut_ptr(&self) -> *mut TaskContext {
         unsafe { &mut self.inner.exclusive_access().task_context }
     }
 
-    /// Get the mutable trap context ptr of this task. **This function is UP-Safe**
+    /// Get the mutable trap context ptr of this task.
+    /// **This function is UP-Safe and cannot be preempted. 
+    ///   Wrap the function in [super::preempt::disable_preempt()] and [super::preempt::restore_preempt()] if needed**
     pub unsafe fn get_trap_context_ptr(&self) -> *const TrapContext {
-        unsafe { &self.inner.exclusive_access().trap_context }
+        unsafe { &self.inner.access().trap_context }
     }
 
-    /// Get the trap context ptr of this task. **This function is UP-Safe**
+    /// Get the trap context ptr of this task.
+    /// **This function is UP-Safe and cannot be preempted. 
+    ///   Wrap the function in [super::preempt::disable_preempt()] and [super::preempt::restore_preempt()] if needed**
     pub unsafe fn get_trap_context_mut_ptr(&self) -> *mut TrapContext {
         unsafe { &mut self.inner.exclusive_access().trap_context }
     }
 
-    /// Get the hart info of this task. **This function is UP-Safe**
+    /// Get the hart info of this task.
+    /// **This function is UP-Safe and cannot be preempted. 
+    ///   Wrap the function in [super::preempt::disable_preempt()] and [super::preempt::restore_preempt()] if needed**
     pub unsafe fn get_hart_info(&self) -> &'static HartInfo {
         unsafe { &HART_INFO[self.inner.exclusive_access().hart_id] }
     }

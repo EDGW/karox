@@ -19,6 +19,7 @@ pub mod arch;
 pub mod devices;
 pub mod entry;
 pub mod mm;
+pub mod mutex;
 mod panic;
 pub mod sched;
 pub mod sync;
@@ -29,11 +30,11 @@ pub mod console;
 
 /// The main function of the operating system
 pub fn rust_main(hart_id: usize, dev_info: impl DeviceInfo) -> ! {
+    init_hart_info(hart_id);
     mm::heap::init_heap();
     SBITable::init();
     devices::load_devs(&dev_info);
     mm::init(dev_info.get_mem_info().unwrap());
-    init_hart_info(hart_id);
     kserial_println!("karox running on hart #{:}", get_hart_info().hart_id);
     task::init();
     trap::init();
