@@ -36,8 +36,40 @@ impl PreemptCounter {
         self.counter.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// ## Notes:
+    /// Since [PreemptCounter] is only expected to appear as a member inside [super::hart::HartInfo],
+    /// there is no need to consider genuine asynchronous concurrent access from different harts;  
+    /// the use of [AtomicUsize] and similar atomic structures is to
+    /// ensure view consistency in the presence of preemption occurring during the execution of
+    /// disable/restore preemption operations.
+    ///
+    /// Although preemption is restored, as long as [PreemptCounter::need_resched] is true,
+    /// it indicates that the context is still in the Task Execution Environment, so nested scheduling cannot occur.
+    ///
+    /// (because we assume that [disable_preempt] and [restore_preempt] always appear in matching pairs,
+    /// and the Scheduling Environment itself cannot be preempted).
+    /// If [PreemptCounter::need_resched] is true, it means the counter was already nonzero when preemption occurred,
+    /// so when the counter is zero, we must have returned to the Task Execution Environment.
     pub fn restore(&self) {
-        self.counter.fetch_sub(1, Ordering::Relaxed);
+        let mut need_resched = false;
+        if self.get_count() == 1 {
+            if let Ok(_) = self.need_resched.compare_exchange(
+                true,
+                false,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                need_resched = true;
+            }
+        }
+        if need_resched {
+            let token = disable_intr();
+            self.counter.fetch_sub(1, Ordering::Relaxed);
+            schedule();
+            restore_intr(token);
+        } else {
+            self.counter.fetch_sub(1, Ordering::Relaxed);
+        }
     }
 
     pub fn get_count(&self) -> usize {
@@ -51,39 +83,7 @@ pub fn disable_preempt() {
 }
 
 /// Restore Preemption
-///
-/// Since [PreemptCounter] is only expected to appear as a member inside [super::hart::HartInfo],
-/// there is no need to consider genuine asynchronous concurrent access from different harts;  
-/// the use of [AtomicUsize] and similar atomic structures is to
-/// ensure view consistency in the presence of preemption occurring during the execution of
-/// disable/restore preemption operations.
-///
-/// Although preemption is restored, as long as [PreemptCounter::need_resched] is true,
-/// it indicates that the context is still in the Task Execution Environment, so nested scheduling cannot occur.
-///
-/// (because we assume that [disable_preempt] and [restore_preempt] always appear in matching pairs,
-/// and the Scheduling Environment itself cannot be preempted).
-/// If [PreemptCounter::need_resched] is true, it means the counter was already nonzero when preemption occurred,
-/// so when the counter is zero, we must have returned to the Task Execution Environment.
 pub fn restore_preempt() {
     let hart = get_hart_info();
-    let preempt = &hart.preempt;
-    let mut need_resched = false;
-    if preempt.get_count() == 1 {
-        if let Ok(_) =
-            preempt
-                .need_resched
-                .compare_exchange(true, false, Ordering::Relaxed, Ordering::Relaxed)
-        {
-            need_resched = true;
-        }
-    }
-    if need_resched {
-        let token = disable_intr();
-        preempt.restore();
-        schedule();
-        restore_intr(token);
-    } else {
-        preempt.restore();
-    }
+    hart.preempt.restore();
 }
