@@ -1,7 +1,4 @@
-use riscv::register::{
-    stvec::{self},
-    utvec::TrapMode,
-};
+use riscv::register::stvec::{self, TrapMode};
 
 use crate::arch::trap::handler::__trap_from_kernel_handler;
 

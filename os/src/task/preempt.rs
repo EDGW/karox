@@ -3,7 +3,6 @@ use crate::{
         hart::get_hart_info,
         trap::intr::{disable_intr, restore_intr},
     },
-    kserial_println,
     task::scheduler::schedule,
 };
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
