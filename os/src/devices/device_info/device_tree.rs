@@ -8,7 +8,7 @@ use crate::{
         endian::EndianData,
         symbols::{_ekernel, _skernel},
     },
-    devices::device_info::{DeviceInfo, MemoryAreaInfo},
+    devices::device_info::{DeviceInfo, HartInfo, MemoryAreaInfo},
     mm::config::PAGE_SIZE,
     phys_addr_from_kernel,
     utils::{num::AlignableTo, range::RangeExt},
@@ -68,12 +68,23 @@ impl DeviceNode {
         // Split array
         let data_cnt = raw_length / cell_width;
         let mut res = Vec::new();
+        if cell_width == 0 {
+            return Ok(res);
+        }
         for i in 0..data_cnt {
             let addr_idx = (i * cell_width) as usize;
             let sz_idx = (i * cell_width + size.address) as usize;
 
-            let mut addr: usize = raw_array[addr_idx].value() as usize;
-            let mut sz: usize = raw_array[sz_idx].value() as usize;
+            let mut addr: usize = if size.address > 0 {
+                raw_array[addr_idx].value() as usize
+            } else {
+                0
+            };
+            let mut sz: usize = if size.size > 0 {
+                raw_array[sz_idx].value() as usize
+            } else {
+                0
+            };
 
             if size.address >= 2 {
                 addr = (addr << 32) + raw_array[addr_idx + 1].value() as usize;
@@ -200,17 +211,21 @@ fn validate_cell_size(size: &RegCellWidth) -> Result<(), DeviceTreeError> {
 pub struct EmbeddedDeviceInfo {
     /// General Memory Area
     ///
-    /// **Static Spaces Used by kernel/BIOS/SBI/MMIO/FDT is marked as not general is not included**
+    /// **Static Spaces Used by kernel/BIOS/SBI/MMIO/FDT is marked as not general and is not included**
     pub general_mem: Vec<MemoryAreaInfo>,
+
+    /// Hart Info
+    pub harts: Vec<HartInfo>,
 }
 
 /// Trait describing a parsed device tree provider.
-pub trait DeviceTree: DeviceInfo {
+pub trait DeviceTree {
     /// Endian-aware 32-bit cell reader used when interpreting property payloads.
     type TDataType: EndianData<u32>;
+    type TError: Debug;
 
     /// Convert the [DeviceTreeError] to [DeviceInfo::TError].
-    fn wrap_error(err: DeviceTreeError) -> Self::TError;
+    fn wrap_error(&self, err: DeviceTreeError) -> Self::TError;
 
     /// Return a reference to the `RwLock` guarding the optional root `DeviceNode`.
     ///
@@ -218,15 +233,28 @@ pub trait DeviceTree: DeviceInfo {
     /// parsed tree.
     fn get_root_node_lock(&self) -> Result<&RwLock<Option<DeviceNode>>, Self::TError>;
 
+    /// Get the memory reservation map. The reserved memory block are aligned to a page
+    ///
+    /// **The reserved memory block are not promised to be not overlapped**
+    ///
+    /// The result should contain the fdt itself.
+    fn get_mem_rsv_map(&self) -> Result<Vec<Range<usize>>, Self::TError>;
+
+    /// Get basic devices.
+    fn get_devices(&self) -> Result<&EmbeddedDeviceInfo, Self::TError>;
+
+    /// Initialize
+    fn init_devs(&self) -> Result<(), Self::TError>;
+
     /// Read `#address-cells` and `#size-cells` from a specific node
     fn get_cell_size(&self, node: &DeviceNode) -> Result<RegCellWidth, Self::TError> {
         let addr_cells = node
             .get_value_as::<Self::TDataType>("#address-cells")
-            .map_err(Self::wrap_error)?
+            .map_err(|err| self.wrap_error(err))?
             .value();
         let size_cells = node
             .get_value_as::<Self::TDataType>("#size-cells")
-            .map_err(Self::wrap_error)?
+            .map_err(|err| self.wrap_error(err))?
             .value();
 
         Ok(RegCellWidth {
@@ -241,7 +269,7 @@ pub trait DeviceTree: DeviceInfo {
         let root_node = guard
             .as_ref()
             .ok_or(DeviceTreeError::NotInitializedError)
-            .map_err(Self::wrap_error)?;
+            .map_err(|err| self.wrap_error(err))?;
         self.get_cell_size(root_node)
     }
 
@@ -255,7 +283,7 @@ pub trait DeviceTree: DeviceInfo {
     ) -> Result<(), Self::TError> {
         mem_node
             .get_reg::<Self::TDataType>(cell_sz)
-            .map_err(Self::wrap_error)?
+            .map_err(|err| self.wrap_error(err))?
             .iter()
             .for_each(|reg| {
                 let mut result = Vec::new();
@@ -296,9 +324,9 @@ pub trait DeviceTree: DeviceInfo {
 
         // add memory reservation spaces given in nodes
         for rsv_node_tree in root_node.find_nodes("reserved-memory") {
-            let cell_sz = self.get_cell_size(rsv_node_tree)?;
+            let cell_sz_sub = self.get_cell_size(rsv_node_tree)?;
             for rsv_node in &rsv_node_tree.subnodes {
-                let reg = rsv_node.get_reg::<Self::TDataType>(&cell_sz);
+                let reg = rsv_node.get_reg::<Self::TDataType>(&cell_sz_sub);
                 if let Ok(ranges) = reg {
                     for r in ranges {
                         rsvs.push(r);
@@ -325,12 +353,51 @@ pub trait DeviceTree: DeviceInfo {
         Ok(mem_area)
     }
 
-    /// Get the memory reservation map. The reserved memory block are aligned to a page
-    ///
-    /// **The reserved memory block are not promised to be not overlapped**
-    ///
-    /// The result should contain the fdt itself.
-    fn get_mem_rsv_map(&self) -> Result<Vec<Range<usize>>, Self::TError>;
+    fn get_hart_info(
+        &self,
+        cpu_node: &DeviceNode,
+        cell_sz: &RegCellWidth,
+    ) -> Result<HartInfo, Self::TError> {
+        let reg = cpu_node
+            .get_reg::<Self::TDataType>(cell_sz)
+            .map_err(|err| self.wrap_error(err))?;
+        let range = reg.first().ok_or_else(|| {
+            self.wrap_error(DeviceTreeError::InvalidPropFormat {
+                prop_name: Box::from("reg"),
+                err: InvalidPropFormatError::ArrayLengthError {
+                    array_type: Box::from(type_name::<Range<usize>>()),
+                    len: 0,
+                    supposed_fact: 1,
+                },
+            })
+        })?;
+        Ok(HartInfo {
+            hart_id: range.start,
+        })
+    }
+
+    /// Get all hart info
+    fn get_all_harts(&self, root_node: &DeviceNode) -> Result<Vec<HartInfo>, Self::TError> {
+        let harts = root_node
+            .find_nodes("cpus")
+            .iter()
+            .try_fold(vec![], |mut acc, &val| {
+                let cell_sz = self.get_cell_size(val)?;
+                let mut res = val
+                    .subnodes
+                    .iter()
+                    .try_fold(vec![], |mut sub_acc, cpu_node| {
+                        if cpu_node.node_name.as_ref().eq("cpu") {
+                            let hart = self.get_hart_info(cpu_node, &cell_sz)?;
+                            sub_acc.push(hart);
+                        }
+                        Ok(sub_acc)
+                    })?;
+                acc.append(&mut res);
+                Ok(acc)
+            })?;
+        Ok(harts)
+    }
 
     /// Initialize basic devices.
     fn init_devices(&self) -> Result<EmbeddedDeviceInfo, Self::TError> {
@@ -338,17 +405,38 @@ pub trait DeviceTree: DeviceInfo {
         let root_node = guard
             .as_ref()
             .ok_or(DeviceTreeError::NotInitializedError)
-            .map_err(Self::wrap_error)?;
+            .map_err(|err| self.wrap_error(err))?;
 
         let cell_sz = self.get_root_cell_size()?;
-        validate_cell_size(&cell_sz).map_err(Self::wrap_error)?;
+        validate_cell_size(&cell_sz).map_err(|err| self.wrap_error(err))?;
 
         let mem_area = self.calc_mem_area(root_node, &cell_sz)?;
-
+        let harts = self.get_all_harts(root_node)?;
         let info = EmbeddedDeviceInfo {
             general_mem: mem_area,
+            harts: harts,
         };
         Ok(info)
+    }
+}
+
+impl<TDataType: EndianData<u32>, TError: Debug, T> DeviceInfo for T
+where
+    T: DeviceTree<TDataType = TDataType, TError = TError>,
+{
+    type TError = TError;
+
+    fn init(&self) -> Result<(), Self::TError> {
+        self.init_devs()
+    }
+
+    /// Return memory area info parsed from the device tree.
+    fn get_mem_info(&self) -> Result<&Vec<MemoryAreaInfo>, Self::TError> {
+        Ok(&self.get_devices()?.general_mem)
+    }
+
+    fn get_hart_info(&self) -> Result<&Vec<super::HartInfo>, Self::TError> {
+        Ok(&self.get_devices()?.harts)
     }
 }
 

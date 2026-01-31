@@ -19,7 +19,10 @@ pub fn load_devs(dev_info: &impl DeviceInfo) {
         panic!("Loading device info failed {:?}", err);
     }
     #[cfg(debug_assertions)]
-    print_mem_info(dev_info);
+    {
+        print_mem_info(dev_info);
+        print_cpu_info(dev_info);
+    }
     kserial_println!("All Devices Loaded.");
 }
 
@@ -45,3 +48,17 @@ pub fn print_mem_info(dev_info: &impl DeviceInfo) {
         tot_size / 1024 / 1024
     );
 }
+
+#[cfg(debug_assertions)]
+/// Print Memory Info
+pub fn print_cpu_info(dev_info: &impl DeviceInfo) {
+    use crate::kserial_print;
+
+    let harts = dev_info.get_hart_info().unwrap();
+    kserial_print!("Hart({:}): [",harts.len());
+    for hart in harts {
+        kserial_print!("#{:},", hart.hart_id);
+    }
+    kserial_println!("]");
+}
+

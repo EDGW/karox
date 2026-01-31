@@ -2,7 +2,7 @@
 #![allow(missing_docs)]
 
 use crate::{
-    arch::{SBITable, SBITrait},
+    arch::{SbiTable, SbiTrait},
     mutex::NoPreemptSpinLock,
 };
 use core::fmt::{Arguments, Error, Write};
@@ -14,7 +14,7 @@ struct SerialOut;
 impl Write for SerialOut {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         for c in s.as_bytes() {
-            SBITable::console_putchr(*c as char).map_err(|_| Error)?;
+            SbiTable::console_putchr(*c as char).map_err(|_| Error)?;
         }
         Ok(())
     }

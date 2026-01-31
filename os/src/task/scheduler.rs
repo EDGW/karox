@@ -37,7 +37,7 @@ pub fn run_tasks() -> ! {
     }
 }
 
-/// Schedule. **Make sure interrupt is disabled before call the scheduler**
+/// Schedule. **Make sure interrupt is disabled before you call the scheduler**
 pub fn schedule() {
     let hart_info = get_hart_info();
     if !hart_info.preempt.is_preempt_allowed() {

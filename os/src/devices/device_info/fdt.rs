@@ -11,9 +11,8 @@ use spin::{once::Once, rwlock::RwLock};
 
 use crate::{
     arch::endian::{BigEndian32, BigEndian64, EndianData},
-    devices::device_info::{
-        DeviceInfo, MemoryAreaInfo,
-        device_tree::{DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo},
+    devices::device_info::device_tree::{
+        DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo,
     },
     kserial_print,
     mm::config::PAGE_SIZE,
@@ -371,35 +370,9 @@ impl FdtTree {
     }
 }
 
-impl DeviceInfo for FdtTree {
-    type TError = FdtError;
-
-    /// Initialize the FDT parser and extract device info.
-    ///
-    /// This validates the header, parses the node tree and populates the
-    /// extracted [EmbeddedDeviceInfo] used by the rest of the kernel.
-    fn init(&self) -> Result<(), FdtError> {
-        self.validate()?;
-        self.load_nodes()?;
-        let dev = self.init_devices()?;
-        self.devices.call_once(|| dev);
-        Ok(())
-    }
-
-    /// Return memory area info parsed from the device tree.
-    fn get_mem_info(&self) -> Result<&Vec<MemoryAreaInfo>, FdtError> {
-        Ok(&self
-            .devices
-            .get()
-            .ok_or(FdtError::DeviceTreeError {
-                err: DeviceTreeError::NotInitializedError,
-            })?
-            .general_mem)
-    }
-}
-
 impl DeviceTree for FdtTree {
     type TDataType = BigEndian32;
+    type TError = FdtError;
 
     /// Get the memory reservation map. The reserved memory block are aligned to a page
     ///
@@ -440,12 +413,27 @@ impl DeviceTree for FdtTree {
         Ok(res)
     }
 
-    fn wrap_error(err: DeviceTreeError) -> FdtError {
+    fn wrap_error(&self, err: DeviceTreeError) -> FdtError {
         FdtError::DeviceTreeError { err }
     }
 
     fn get_root_node_lock(&self) -> Result<&RwLock<Option<DeviceNode>>, FdtError> {
         Ok(&self.fdt_node)
+    }
+
+    fn get_devices(&self) -> Result<&EmbeddedDeviceInfo, FdtError> {
+        let res = self.devices.get().ok_or(FdtError::DeviceTreeError {
+            err: DeviceTreeError::NotInitializedError,
+        })?;
+        Ok(res)
+    }
+
+    fn init_devs(&self) -> Result<(), FdtError> {
+        self.validate()?;
+        self.load_nodes()?;
+        let dev = self.init_devices()?;
+        self.devices.call_once(|| dev);
+        Ok(())
     }
 }
 

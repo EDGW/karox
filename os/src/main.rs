@@ -6,7 +6,7 @@
 
 use crate::{
     arch::{
-        SBITable, SBITrait,
+        SbiTable, SbiTrait,
         hart::{get_hart_info, init_hart_info},
         trap,
     },
@@ -32,11 +32,18 @@ pub mod console;
 pub fn rust_main(hart_id: usize, dev_info: impl DeviceInfo) -> ! {
     init_hart_info(hart_id);
     mm::heap::init_heap();
-    SBITable::init();
+    SbiTable::init();
     devices::load_devs(&dev_info);
     mm::init(dev_info.get_mem_info().unwrap());
     kserial_println!("karox running on hart #{:}", get_hart_info().hart_id);
     task::init();
     trap::init();
     run_tasks();
+}
+
+/// The main function of the operating system
+pub fn rust_slave(hart_id: usize) -> ! {
+    init_hart_info(hart_id);
+    kserial_println!("karox running on slave hart #{:}", get_hart_info().hart_id);
+    loop {}
 }

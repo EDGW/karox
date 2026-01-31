@@ -1,5 +1,5 @@
 use crate::{
-    arch::{SBITable, trap::context::TrapContext},
+    arch::{SbiTable, trap::context::TrapContext},
     task::scheduler::schedule,
 };
 use riscv::register::{scause::Interrupt, sie, sstatus, time};
@@ -15,7 +15,7 @@ pub fn intr_handler(intr_type: Interrupt, _context: &mut TrapContext) {
 
 fn timer_tick() {
     let time = time::read();
-    SBITable::set_timer(time + TIMER_TICK)
+    SbiTable::set_timer(time + TIMER_TICK)
         .unwrap_or_else(|value| panic!("Unexpected timer error:{:#x}", value));
     schedule();
 }

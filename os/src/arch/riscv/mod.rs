@@ -11,4 +11,4 @@ pub mod trap;
 
 // TODO:Temporarily Used
 #[allow(missing_docs)]
-pub type SBITable = sbi::SBITable;
+pub type SbiTable = sbi::SbiTable;
