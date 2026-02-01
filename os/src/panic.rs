@@ -1,9 +1,10 @@
-use crate::kserial_println;
+use crate::{arch::hart::get_hart_info, kserial_println};
 use core::panic::PanicInfo;
 
 #[panic_handler]
 pub fn panic_handler(pinfo: &PanicInfo) -> ! {
-    kserial_println!("[Panic] {:}", pinfo);
+    kserial_println!("{:}", pinfo);
+    kserial_println!("Panic on hart #{:}.", get_hart_info().hart_id);
     loop {}
 }
 
