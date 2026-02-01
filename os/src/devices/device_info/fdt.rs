@@ -14,7 +14,6 @@ use crate::{
     devices::device_info::device_tree::{
         DeviceNode, DeviceProp, DeviceTree, DeviceTreeError, EmbeddedDeviceInfo,
     },
-    kserial_print,
     mm::config::PAGE_SIZE,
     utils::num::AlignableTo,
 };
@@ -346,20 +345,6 @@ impl FdtTree {
         read_and_check(&mut ptr, FdtNodeType::FDT_END)?;
         *(self.fdt_node.write()) = Some(node);
         Ok(())
-    }
-
-    /// Debug helper to print the node tree in a compact, non-standard format.
-    #[allow(unused)]
-    pub fn print_nodes(&self, node: &DeviceNode, tab: usize) {
-        let tabstr = String::from("\t").repeat(tab);
-        kserial_print!("{:} -- Node {:} [", tabstr, node.node_name);
-        for nd in &node.props {
-            kserial_print!("@'{:}'={:?}, ", nd.prop_name, nd.raw_data);
-        }
-        kserial_print!("]\n");
-        for subn in &node.subnodes {
-            self.print_nodes(subn, tab + 1);
-        }
     }
 
     /// Return the parsed [EmbeddedDeviceInfo] if the device tree has been initialized.

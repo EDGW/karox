@@ -14,7 +14,6 @@ use crate::{
             paging::{PageDir, PageTableFlags},
         },
     },
-    kserial_println,
     mm::{
         config::PTABLE_ENTRY_COUNT,
         frame::{FRAME_ALLOC, FrameAllocatorError},
@@ -560,7 +559,6 @@ unsafe fn map_pages_internal(
 // endregion
 
 pub fn init() {
-    kserial_println!("Initializing Paging...");
     arch::mm::paging::init();
 }
 

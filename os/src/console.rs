@@ -1,10 +1,7 @@
 // TODO: Temporarily Used
 #![allow(missing_docs)]
 
-use crate::{
-    arch::{SbiTable, SbiTrait},
-    mutex::NoPreemptSpinLock,
-};
+use crate::{arch::SbiTable, mutex::NoPreemptSpinLock};
 use core::fmt::{Arguments, Error, Write};
 
 static CON_LOCK: NoPreemptSpinLock<()> = NoPreemptSpinLock::new(());

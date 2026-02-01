@@ -1,9 +1,8 @@
+use crate::task::hart::{HART_INFO, HartInfo};
+use core::fmt::Debug;
 use riscv::register::sstatus::{self, SPP, Sstatus};
 
-use crate::task::hart::{HART_INFO, HartInfo};
-
 #[repr(C)]
-#[derive(Debug)]
 pub struct TrapContext {
     pub x: [usize; 32],
     pub sstatus: Sstatus,
@@ -41,5 +40,17 @@ impl TrapContext {
             hart_info_ptr: hart_info as *const HartInfo as usize,
             kstack_top: kstack_top,
         }
+    }
+}
+
+impl Debug for TrapContext {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TrapContext")
+            .field("x", &self.x)
+            .field("sstatus", &format_args!("{:#x}", self.sstatus.bits()))
+            .field("sepc", &format_args!("{:#x}", self.sepc))
+            .field("hart_info_ptr", &format_args!("{:#x}", self.hart_info_ptr))
+            .field("kstack_top", &format_args!("{:#x}", self.kstack_top))
+            .finish()
     }
 }

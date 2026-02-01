@@ -6,7 +6,6 @@
 use crate::{
     arch::{MAX_PHYS_ADDR, mm::PageNum},
     devices::device_info::MemoryAreaInfo,
-    kserial_println,
     mutex::{NoPreemptSpinLock, no_preempt::NoPreemptSpinLockGuard},
 };
 use alloc::{vec, vec::Vec};
@@ -132,16 +131,9 @@ pub fn init(general_mem: &Vec<MemoryAreaInfo>) {
                 start,
                 end: max_addr,
             });
-            kserial_println!(
-                "Ignored unreachable memory area {:?}",
-                MemoryAreaInfo {
-                    start: max_addr,
-                    end: end
-                }
-            );
+            // Ignore areas exceeding MAX_ADDR
         } else {
-            // start > MAX_PHYSICAL_ADDR
-            kserial_println!("Ignored unreachable memory area {:?}", *area);
+            // Ignore areas exceeding MAX_ADDR
         }
     }
 }

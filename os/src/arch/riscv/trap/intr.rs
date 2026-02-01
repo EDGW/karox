@@ -16,7 +16,7 @@ pub fn intr_handler(intr_type: Interrupt, _context: &mut TrapContext) {
 fn timer_tick() {
     let time = time::read();
     SbiTable::set_timer(time + TIMER_TICK)
-        .unwrap_or_else(|value| panic!("Unexpected timer error:{:#x}", value));
+        .unwrap_or_else(|value| panic!("Unexpected timer error:{:?}", value));
     schedule();
 }
 

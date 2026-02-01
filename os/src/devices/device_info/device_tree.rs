@@ -10,7 +10,7 @@ use crate::{
     },
     devices::device_info::{DeviceInfo, HartInfo, MemoryAreaInfo},
     mm::config::PAGE_SIZE,
-    phys_addr_from_kernel,
+    phys_addr_from_symbol,
     utils::{num::AlignableTo, range::RangeExt},
 };
 
@@ -337,8 +337,8 @@ pub trait DeviceTree {
 
         // add kernel page
         rsvs.push(Range {
-            start: phys_addr_from_kernel!(_skernel).align_down(PAGE_SIZE),
-            end: phys_addr_from_kernel!(_ekernel).align_up(PAGE_SIZE),
+            start: phys_addr_from_symbol!(_skernel).align_down(PAGE_SIZE),
+            end: phys_addr_from_symbol!(_ekernel).align_up(PAGE_SIZE),
         });
 
         // calculate memory area

@@ -4,10 +4,7 @@
 
 #![allow(unused)]
 
-use crate::{
-    arch::mm::PageNum, devices::device_info::MemoryAreaInfo, kserial_println,
-    mm::frame::FrameAllocator,
-};
+use crate::{arch::mm::PageNum, devices::device_info::MemoryAreaInfo, mm::frame::FrameAllocator};
 
 /// Maximum order for the buddy system.
 pub const MAX_ORDER: usize = 32;

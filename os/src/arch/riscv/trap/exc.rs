@@ -1,4 +1,4 @@
-use crate::{arch::trap::context::TrapContext, kserial_println};
+use crate::arch::trap::context::TrapContext;
 
 pub const EXCEPTION_DESC: [&'static str; 16] = {
     let mut res = ["Reserved or Designated for Custom Use"; 16];
@@ -26,12 +26,10 @@ pub fn get_exception_desc(code: usize) -> &'static str {
     }
 }
 pub fn exception_handler(exception_code: usize, context: &mut TrapContext, _stval: usize) {
-    kserial_println!(
+    panic!(
         "Unexcepted Exception {:#x}({:}) Occurred in kernel at {:#x}",
         exception_code,
         get_exception_desc(exception_code),
         context.sepc
     );
-    kserial_println!("Trap Info:\n{:?}", context);
-    panic!()
 }

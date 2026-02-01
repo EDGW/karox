@@ -1,7 +1,4 @@
-//! ## Memory Management Module
-
-use crate::devices::device_info::MemoryAreaInfo;
-use alloc::vec::Vec;
+use crate::devices::device_info::DeviceInfo;
 
 pub mod config;
 pub mod frame;
@@ -10,9 +7,13 @@ pub mod paging;
 pub mod space;
 pub mod stack;
 
-/// Initializes the memory system.
-///
-pub fn init(general_mem_areas: &Vec<MemoryAreaInfo>) {
-    frame::init(general_mem_areas);
+/// Initializes the memory management module.
+pub fn init(device_info: &impl DeviceInfo) {
+    frame::init(device_info.get_mem_info().unwrap());
+    paging::init();
+}
+
+/// Initializes the memory management module as a slave hart.
+pub fn init_slave() {
     paging::init();
 }

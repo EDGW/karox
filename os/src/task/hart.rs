@@ -1,10 +1,12 @@
 use crate::{
     arch::{MAX_HARTS, task::context::TaskContext},
+    devices::device_info::DeviceInfo,
     sched::idle::IDLE_TASKS,
     sync::UPSafeCell,
     task::{preempt::PreemptCounter, task::Task},
 };
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec, vec::Vec};
+use spin::Once;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -43,11 +45,22 @@ pub static HART_INFO: [HartInfo; MAX_HARTS] = {
     res
 };
 
+static HARTS: Once<Vec<&'static HartInfo>> = Once::new();
+
+pub fn get_all_harts() -> &'static Vec<&'static HartInfo> {
+    HARTS.get().unwrap()
+}
+
 /// Initialize task-related members in [HART_INFO].
-pub fn init() {
-    for i in 0..MAX_HARTS {
-        let mut inner = unsafe { HART_INFO[i].inner.exclusive_access() };
-        inner.running_task = Some(IDLE_TASKS[i].clone());
+pub fn init(dev_info: &impl DeviceInfo) {
+    let harts = dev_info.get_hart_info().unwrap();
+    let mut all_harts = vec![];
+    for hart in harts {
+        let hart_id = hart.hart_id;
+        let mut inner = unsafe { HART_INFO[hart_id].inner.exclusive_access() };
+        inner.running_task = Some(IDLE_TASKS[hart_id].clone());
         drop(inner);
+        all_harts.push(&HART_INFO[hart_id]);
     }
+    HARTS.call_once(|| all_harts);
 }

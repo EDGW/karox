@@ -19,8 +19,7 @@
 //! * Initializing Environment: This refers to when the operating system is still initializing.
 
 use crate::{
-    arch::{hart::get_hart_info, task::context::TaskContext},
-    task::{preempt::{disable_preempt, restore_preempt}, task::Task},
+    arch::{hart::get_hart_info, task::context::TaskContext}, devices::device_info::DeviceInfo, task::{preempt::{disable_preempt, restore_preempt}, task::Task}
 };
 use alloc::sync::Arc;
 
@@ -61,6 +60,6 @@ pub fn get_current_sched_context_mut() -> *mut TaskContext {
 }
 
 /// Initialize
-pub fn init() {
-    hart::init();
+pub fn init(dev_info: &impl DeviceInfo) {
+    hart::init(dev_info);
 }

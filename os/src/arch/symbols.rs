@@ -16,6 +16,6 @@ unsafe extern "C" {
 }
 
 #[macro_export]
-macro_rules! phys_addr_from_kernel {
+macro_rules! phys_addr_from_symbol {
     ($symbol: expr) => {{ ($symbol as *const u8 as usize) - crate::arch::KERNEL_OFFSET }};
 }

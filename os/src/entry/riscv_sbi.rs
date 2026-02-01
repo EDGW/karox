@@ -2,7 +2,8 @@
 //!
 //! Initialization Steps:
 //! 1. starting from [_start]: set up a temporary stack pointer.
-//! 2. jumping to [adjust_dtb]: adjust dtb: copy the dtb to the lower space of the memory to avoid memory holes and virtual address overflow
+//! 2. jumping to [adjust_dtb]: adjust dtb: copy the dtb to the lower space of the memory to
+//!     avoid memory holes and virtual address overflow
 //! 3. jumping to [setup]: set up a boot page table and the kernel stack.
 //! 4. jumping to [start]: clear the bss and create a fdt tree instance (uninitialized).
 //! 5. jumping to [crate::rust_main]
@@ -11,15 +12,17 @@ use core::arch::naked_asm;
 
 use crate::{
     arch::{
-        KERNEL_OFFSET, PAGE_WIDTH, SbiTable,
+        KERNEL_OFFSET, PAGE_WIDTH,
         endian::EndianData,
+        hart::init_hart_info,
         mm::{BOOT_STACK, paging::BOOT_PTABLE},
         symbols::_ekernel,
     },
     devices::device_info::FdtTree,
     entry::shared::clear_bss,
+    kernel_main, kernel_slave,
     mm::config::KERNEL_STACK_SHIFT,
-    rust_main, rust_slave,
+    phys_addr_from_symbol,
 };
 use riscv::register::satp;
 
@@ -57,6 +60,8 @@ unsafe extern "C" fn _start(hart_id: usize, dtb_addr: usize) {
 }
 
 /// Move the dtb to the place right behind the kernel.
+///
+/// Do nothing if starting from a slave hart.
 #[inline(always)]
 fn adjust_dtb(hart_id: usize, dtb_addr: usize) -> ! {
     unsafe {
@@ -122,24 +127,16 @@ unsafe extern "C" fn setup(hart_id: usize, dtb_addr: usize) -> ! {
     )
 }
 
-/// Step 2
+/// Write the hart info to `tp` register and jump to kernel main.
 fn start(hart_id: usize, dtb_addr: usize) -> ! {
+    init_hart_info(hart_id);
     if dtb_addr != 0 {
         // Main Hart
         clear_bss();
-        let dtree = FdtTree::from_ptr(dtb_addr as *const u8);
-        rust_main(hart_id, dtree);
+        let dev_tree = FdtTree::from_ptr(dtb_addr as *const u8);
+        kernel_main(dev_tree, phys_addr_from_symbol!(_start));
     } else {
         // Slave Hart
-        rust_slave(hart_id);
+        kernel_slave();
     }
-}
-
-pub fn wake_slave_hart(hart_id: usize) {
-    SbiTable::hart_start(hart_id, _start as *const () as usize, 0).unwrap_or_else(|err| {
-        panic!(
-            "Unable to wake up slave hart {:} with sbi error code {}",
-            hart_id, err
-        )
-    });
 }

@@ -11,13 +11,13 @@ use crate::{
         paging::{PageDirTrait, PageTable, PagingError},
         space::MemSpace,
     },
-    phys_addr_from_kernel,
+    phys_addr_from_symbol,
 };
 use alloc::boxed::Box;
 use bitflags::bitflags;
 use core::{
     array,
-    fmt::{self, Debug},
+    fmt::Debug,
     ops::{Deref, Range},
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -55,7 +55,7 @@ bitflags! {
         ///
         /// A page entry with the `GLOBAL` flag will be kept in the TLB cache. Changing the mappings
         /// for a global entry may lead to unexpected consequences.
-        const GLOBAL    = 0b000_0_000_0;
+        const GLOBAL    = 0b001_0_000_0;
         /// Accessed bit, indicating that the page has been accessed.
         const ACCESSED  = 0b010_0_000_0;
         /// Dirty bit, indicating that the page has been written to.
@@ -168,6 +168,7 @@ impl RawPageDir {
 // endregion
 
 // region: PageDir
+#[derive(Debug)]
 pub struct PageDir {
     frame: Frame,
     subdirs: [Option<Box<PageDir>>; PTABLE_ENTRY_COUNT],
@@ -203,32 +204,6 @@ impl PageDir {
     }
     pub fn ppn(&self) -> PageNum {
         self.frame.ppn()
-    }
-
-    fn print(&self, tab: usize, f: &mut core::fmt::Formatter<'_>) -> fmt::Result {
-        let raw = unsafe { self.as_data_ref() };
-        for i in 0..PTABLE_ENTRY_COUNT {
-            for _ in 0..tab {
-                f.write_str("   ")?;
-            }
-            f.write_str("|")?;
-            let entry = raw.get_value(i);
-            if !entry.is_valid() {
-                f.write_str("[EMPTY]\n")?;
-                continue;
-            }
-            if entry.is_dir() {
-                f.write_fmt(format_args!("[{:}]\n", i))?;
-                self.subdirs[i].as_ref().unwrap().print(tab + 1, f)?;
-            } else {
-                f.write_fmt(format_args!(
-                    "[{:}] -> {:#x}\n",
-                    i,
-                    entry.get_ppn().into_const()
-                ))?;
-            }
-        }
-        Ok(())
     }
 }
 
@@ -340,13 +315,6 @@ impl PageDirTrait for PageDir {
     }
 }
 
-impl Debug for PageDir {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.print(0, f)?;
-        Ok(())
-    }
-}
-
 // endregion
 
 // region: Boot Page Table
@@ -395,29 +363,29 @@ fn create_kernel_ptable() -> Result<PageTable, PagingError> {
     let sections = [
         (
             Range {
-                start: PageNum::from_addr(phys_addr_from_kernel!(_stext)),
-                end: PageNum::from_addr(phys_addr_from_kernel!(_etext)),
+                start: PageNum::from_addr(phys_addr_from_symbol!(_stext)),
+                end: PageNum::from_addr(phys_addr_from_symbol!(_etext)),
             },
             PageTableFlags::RX,
         ),
         (
             Range {
-                start: PageNum::from_addr(phys_addr_from_kernel!(_srodata)),
-                end: PageNum::from_addr(phys_addr_from_kernel!(_erodata)),
+                start: PageNum::from_addr(phys_addr_from_symbol!(_srodata)),
+                end: PageNum::from_addr(phys_addr_from_symbol!(_erodata)),
             },
             PageTableFlags::R,
         ),
         (
             Range {
-                start: PageNum::from_addr(phys_addr_from_kernel!(_sdata)),
-                end: PageNum::from_addr(phys_addr_from_kernel!(_edata)),
+                start: PageNum::from_addr(phys_addr_from_symbol!(_sdata)),
+                end: PageNum::from_addr(phys_addr_from_symbol!(_edata)),
             },
             PageTableFlags::RW,
         ),
         (
             Range {
-                start: PageNum::from_addr(phys_addr_from_kernel!(_sbss)),
-                end: PageNum::from_addr(phys_addr_from_kernel!(_ebss)),
+                start: PageNum::from_addr(phys_addr_from_symbol!(_sbss)),
+                end: PageNum::from_addr(phys_addr_from_symbol!(_ebss)),
             },
             PageTableFlags::RW,
         ),

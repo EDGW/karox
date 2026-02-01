@@ -2,7 +2,7 @@
 //!
 //! It's the earliest-initialized module because the kernel cannot run without heap allocation
 
-use crate::{define_struct, kserial_println, mm::config::KERNEL_HEAP_SIZE};
+use crate::{define_struct, mm::config::KERNEL_HEAP_SIZE};
 use buddy_system_allocator::LockedHeap;
 
 // Packed type for heap space.
@@ -23,5 +23,4 @@ pub fn init_heap() {
     unsafe {
         KERNEL_ALLOC.lock().init(st, KERNEL_HEAP_SIZE);
     }
-    kserial_println!("Kernel Heap Space: {:#x}+{:#x}.", st, KERNEL_HEAP_SIZE);
 }

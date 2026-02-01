@@ -26,7 +26,5 @@ macro_rules! define_arch {
 define_arch!(riscv, "riscv64");
 define_arch!(loongarch, "loongarch64");
 
-mod sbi;
-pub use sbi::*;
 pub mod endian;
 pub mod symbols;

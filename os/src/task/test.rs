@@ -9,7 +9,7 @@ use crate::{
 
 pub fn add_test_tasks() {
     unsafe {
-        for _ in 0..20 {
+        for _ in 0..5000 {
             add_to_current(test_fn as *const ());
         }
     }
@@ -27,9 +27,10 @@ pub fn test_fn() -> ! {
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
     loop {
         kserial_println!(
-            "[Test Function {:} from task(tid #{:})]",
+            "[Test Function {:} from task(tid #{:}, hart #{:})]",
             id,
-            get_current_task().get_tid()
+            get_current_task().get_tid(),
+            get_hart_info().hart_id
         );
     }
 }
