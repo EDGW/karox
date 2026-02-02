@@ -15,7 +15,7 @@ pub static KERNEL_HEAP: HeapSpace = HeapSpace::from_const([0; KERNEL_HEAP_SIZE])
 
 /// The global allocator, a buddy-system-allocator
 #[global_allocator]
-pub static KERNEL_ALLOC: LockedHeap<32> = LockedHeap::empty();
+pub static KERNEL_ALLOC: LockedHeap<32> = LockedHeap::new();
 
 /// Initialize the kernel allocator
 pub fn init_heap() {

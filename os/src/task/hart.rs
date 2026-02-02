@@ -1,6 +1,7 @@
 use crate::{
     arch::{MAX_HARTS, task::context::TaskContext},
     devices::device_info::DeviceInfo,
+    panic_init,
     sched::idle::IDLE_TASKS,
     sync::UPSafeCell,
     task::{preempt::PreemptCounter, task::Task},
@@ -48,12 +49,16 @@ pub static HART_INFO: [HartInfo; MAX_HARTS] = {
 static HARTS: Once<Vec<&'static HartInfo>> = Once::new();
 
 pub fn get_all_harts() -> &'static Vec<&'static HartInfo> {
-    HARTS.get().unwrap()
+    HARTS
+        .get()
+        .expect("Error getting all harts: Not initialized.")
 }
 
 /// Initialize task-related members in [HART_INFO].
 pub fn init(dev_info: &impl DeviceInfo) {
-    let harts = dev_info.get_hart_info().unwrap();
+    let harts = dev_info
+        .get_hart_info()
+        .unwrap_or_else(|err| panic_init!("Error getting hart info: {:?}", err));
     let mut all_harts = vec![];
     for hart in harts {
         let hart_id = hart.hart_id;

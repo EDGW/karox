@@ -1,25 +1,30 @@
 //! Task Module
 //! We divide the execution environment into three types:
-//! * Task Execution Environment: This is when the content of the Task is being executed. 
+//! * Task Execution Environment: This is when the content of the Task is being executed.
 //!     
-//!     At this time, the result returned by [get_current_task()] remains unchanged, 
+//!     At this time, the result returned by [get_current_task()] remains unchanged,
 //!     which points to the current task's [Arc] pointer.
 //!     
-//!     **When a Trap is encountered, we are still in the Task Execution Environment, 
+//!     **When a Trap is encountered, we are still in the Task Execution Environment,
 //!     but the control flow has changed**, because the executing task itself hasn't changed.
-//! 
+//!
 //! * Scheduling Environment: This refers to when [scheduler::schedule()] and [scheduler::run_tasks()] are executing.
-//! 
-//!     [scheduler::run_tasks()] is the scheduling function, responsible for 
+//!
+//!     [scheduler::run_tasks()] is the scheduling function, responsible for
 //!     selecting the next task to execute from the scheduler and transferring control to that task.
-//!     [scheduler::schedule()] attempts to trigger a scheduling event if possible. 
-//!     If scheduling is possible, it will transfer control to the scheduler; 
+//!     [scheduler::schedule()] attempts to trigger a scheduling event if possible.
+//!     If scheduling is possible, it will transfer control to the scheduler;
 //!     otherwise (for example, if the hart is set to non-preemptible), it will do nothing.
-//! 
+//!
 //! * Initializing Environment: This refers to when the operating system is still initializing.
 
 use crate::{
-    arch::{hart::get_hart_info, task::context::TaskContext}, devices::device_info::DeviceInfo, task::{preempt::{disable_preempt, restore_preempt}, task::Task}
+    arch::{hart::get_hart_info, task::context::TaskContext},
+    devices::device_info::DeviceInfo,
+    task::{
+        preempt::{disable_preempt, restore_preempt},
+        task::Task,
+    },
 };
 use alloc::sync::Arc;
 

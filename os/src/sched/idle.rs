@@ -1,10 +1,15 @@
-use crate::{arch::MAX_HARTS, task::task::Task};
+use crate::{
+    arch::{MAX_HARTS, trap::intr::wait_for_intr},
+    task::task::Task,
+};
 use alloc::sync::Arc;
 use core::array;
 use lazy_static::lazy_static;
 
 pub fn idle_main() -> ! {
-    loop {}
+    loop {
+        wait_for_intr();
+    }
 }
 
 pub fn create_idle_task(hart_id: usize) -> Arc<Task> {

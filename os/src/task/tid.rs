@@ -55,7 +55,8 @@ impl Drop for TaskId {
     }
 }
 
-pub static TID_ALLOC: NoPreemptSpinLock<TaskIdAllocator> = NoPreemptSpinLock::new(TaskIdAllocator::new());
+pub static TID_ALLOC: NoPreemptSpinLock<TaskIdAllocator> =
+    NoPreemptSpinLock::new(TaskIdAllocator::new());
 
 pub fn alloc_tid() -> TaskId {
     TaskId {

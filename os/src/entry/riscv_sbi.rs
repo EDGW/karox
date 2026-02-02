@@ -14,15 +14,16 @@ use crate::{
     arch::{
         KERNEL_OFFSET, PAGE_WIDTH,
         endian::EndianData,
-        hart::init_hart_info,
+        hart::{init_hart_info, wake_slave_harts},
         mm::{BOOT_STACK, paging::BOOT_PTABLE},
         symbols::_ekernel,
     },
-    devices::device_info::FdtTree,
+    devices::device_info::{DeviceInfo, FdtTree},
+    early_init_main,
     entry::shared::clear_bss,
     kernel_main, kernel_slave,
     mm::config::KERNEL_STACK_SHIFT,
-    phys_addr_from_symbol,
+    panic_init, phys_addr_from_symbol,
 };
 use riscv::register::satp;
 
@@ -131,12 +132,29 @@ unsafe extern "C" fn setup(hart_id: usize, dtb_addr: usize) -> ! {
 fn start(hart_id: usize, dtb_addr: usize) -> ! {
     init_hart_info(hart_id);
     if dtb_addr != 0 {
+        start_main(hart_id, dtb_addr);
         // Main Hart
-        clear_bss();
-        let dev_tree = FdtTree::from_ptr(dtb_addr as *const u8);
-        kernel_main(dev_tree, phys_addr_from_symbol!(_start));
     } else {
         // Slave Hart
         kernel_slave();
     }
+}
+
+fn start_main(hart_id: usize, dtb_addr: usize) -> ! {
+    clear_bss();
+
+    let dev_info = FdtTree::from_ptr(dtb_addr as *const u8);
+    early_init_main(&dev_info);
+
+    for hart in dev_info
+        .get_hart_info()
+        .unwrap_or_else(|err| panic_init!("Error getting hart info: {:?}", err))
+    {
+        if hart.hart_id == hart_id {
+            continue;
+        }
+        wake_slave_harts(hart.hart_id, phys_addr_from_symbol!(_start));
+    }
+
+    kernel_main(dev_info);
 }

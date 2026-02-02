@@ -2,7 +2,10 @@ use crate::{
     arch::{SbiTable, trap::context::TrapContext},
     task::scheduler::schedule,
 };
-use riscv::register::{scause::Interrupt, sie, sstatus, time};
+use riscv::{
+    asm::wfi,
+    register::{scause::Interrupt, sie, sstatus, time},
+};
 
 pub const TIMER_TICK: usize = 0x1000;
 
@@ -53,6 +56,12 @@ pub fn restore_intr(previous: bool) {
         unsafe {
             sstatus::clear_sie();
         }
+    }
+}
+
+pub fn wait_for_intr() {
+    unsafe {
+        wfi();
     }
 }
 
