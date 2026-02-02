@@ -8,14 +8,16 @@ use core::{cell::{Ref, RefCell, RefMut}, fmt::Debug};
 ///
 /// In order to get mutable reference of inner data, call
 /// `exclusive_access`.
-pub struct UPSafeCell<T> {
+/// 
+/// It's adapted from `UPSafeCell` in rCore project, and renamed.
+pub struct LocalCell<T> {
     /// inner data
     inner: RefCell<T>,
 }
 
-unsafe impl<T> Sync for UPSafeCell<T> {}
+unsafe impl<T> Sync for LocalCell<T> {}
 
-impl<T> UPSafeCell<T> {
+impl<T> LocalCell<T> {
     /// User is responsible to guarantee that inner struct is only used in
     /// uniprocessor.
     pub const unsafe fn new(value: T) -> Self {
@@ -34,7 +36,7 @@ impl<T> UPSafeCell<T> {
     }
 }
 
-impl<T:Debug> Debug for UPSafeCell<T>{
+impl<T:Debug> Debug for LocalCell<T>{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("UPSafeCell").field("inner", &self.inner).finish()
     }

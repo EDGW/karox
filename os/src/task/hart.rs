@@ -3,7 +3,7 @@ use crate::{
     devices::device_info::DeviceInfo,
     panic_init,
     sched::idle::IDLE_TASKS,
-    sync::UPSafeCell,
+    sync::LocalCell,
     task::{preempt::PreemptCounter, task::Task},
 };
 use alloc::{sync::Arc, vec, vec::Vec};
@@ -14,7 +14,7 @@ use spin::Once;
 pub struct HartInfo {
     pub hart_id: usize,
     pub preempt: PreemptCounter,
-    pub inner: UPSafeCell<HartInfoInner>,
+    pub inner: LocalCell<HartInfoInner>,
 }
 
 /// Members wrapped in [HartInfoInner] are probably changed as [super::scheduler::schedule()] executes.
@@ -31,7 +31,7 @@ pub static HART_INFO: [HartInfo; MAX_HARTS] = {
         hart_id: 0,
         preempt: PreemptCounter::new(),
         inner: unsafe {
-            UPSafeCell::new(HartInfoInner {
+            LocalCell::new(HartInfoInner {
                 running_task: None,
                 sched_context: TaskContext::uninitialized(),
             })

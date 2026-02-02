@@ -1,7 +1,7 @@
 use crate::{
     arch::{MAX_HARTS, hart::get_hart_info, task::switch::__switch},
     sched::{DefaultScheduler, Scheduler},
-    sync::UPSafeCell,
+    sync::LocalCell,
     task::{
         get_current_sched_context, get_current_sched_context_mut, get_current_task,
         hart::HART_INFO, scheduler::test::add_test_tasks,
@@ -15,8 +15,8 @@ use riscv::register::sscratch;
 pub mod test;
 
 lazy_static! {
-    static ref SCHEDULERS: [UPSafeCell<DefaultScheduler>; MAX_HARTS] =
-        array::from_fn(|hart_id| unsafe { UPSafeCell::new(DefaultScheduler::new(hart_id)) });
+    static ref SCHEDULERS: [LocalCell<DefaultScheduler>; MAX_HARTS] =
+        array::from_fn(|hart_id| unsafe { LocalCell::new(DefaultScheduler::new(hart_id)) });
 }
 
 pub fn run_tasks() -> ! {

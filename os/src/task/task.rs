@@ -1,7 +1,7 @@
 use crate::{
     arch::{KERNEL_OFFSET, MAX_HARTS, task::context::TaskContext, trap::context::TrapContext},
     mm::{frame::FrameAllocatorError, space::MemSpace, stack::KernelStack},
-    sync::UPSafeCell,
+    sync::LocalCell,
     task::{
         hart::{HART_INFO, HartInfo},
         tid::{TaskId, alloc_tid},
@@ -27,7 +27,7 @@ pub struct Task {
     pub kstack: KernelStack,
 
     /// Inner Mutable
-    pub inner: UPSafeCell<TaskInner>,
+    pub inner: LocalCell<TaskInner>,
 }
 
 #[derive(Debug)]
@@ -66,7 +66,7 @@ impl Task {
             memsp: None,
             kstack_top: kstack.get_stack_top(),
             kstack,
-            inner: unsafe { UPSafeCell::new(inner) },
+            inner: unsafe { LocalCell::new(inner) },
         });
         let trap_ctx = unsafe { res.get_trap_context_mut_ptr() };
         let mut inner_exc = unsafe { res.inner.exclusive_access() };

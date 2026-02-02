@@ -56,7 +56,7 @@ pub fn early_init_main(dev_info: &impl DeviceInfo) {
 }
 
 /// The main function of the operating system.
-/// **The entry must call [early_init] and wake up all slave harts before entering [kernel_main];**
+/// **The entry must call [early_init_main] and wake all slave harts before entering [kernel_main];**
 pub fn kernel_main(dev_info: impl DeviceInfo) -> ! {
     debug_ex!("karox running on hart #{:}.", get_hart_info().hart_id);
     mm::init(&dev_info);
