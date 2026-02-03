@@ -4,9 +4,28 @@ use spin::{MutexGuard, Spin, mutex::Mutex};
 
 use crate::task::preempt::{disable_preempt, restore_preempt};
 
-pub struct NoPreemptSpinLock<T: ?Sized> {
+pub struct SpinLock<T: ?Sized> {
     inner: Mutex<T, Spin>,
 }
+
+impl<T: ?Sized> SpinLock<T> {
+    pub fn lock(&self) -> MutexGuard<'_, T> {
+        self.inner.lock()
+    }
+    pub fn lock_no_preempt(&self) -> NoPreemptSpinLockGuard<'_, T> {
+        NoPreemptSpinLockGuard::new(&self.inner)
+    }
+}
+
+impl<T> SpinLock<T> {
+    pub const fn new(value: T) -> SpinLock<T> {
+        SpinLock {
+            inner: Mutex::new(value),
+        }
+    }
+}
+
+// region: NoPreemptGuard
 
 pub struct NoPreemptSpinLockGuard<'a, T: ?Sized> {
     inner: Option<MutexGuard<'a, T>>,
@@ -39,15 +58,4 @@ impl<'a, T> DerefMut for NoPreemptSpinLockGuard<'a, T> {
     }
 }
 
-impl<T: ?Sized> NoPreemptSpinLock<T> {
-    pub fn lock(&self) -> NoPreemptSpinLockGuard<'_, T> {
-        NoPreemptSpinLockGuard::new(&self.inner)
-    }
-}
-impl<T> NoPreemptSpinLock<T> {
-    pub const fn new(value: T) -> NoPreemptSpinLock<T> {
-        NoPreemptSpinLock {
-            inner: Mutex::new(value),
-        }
-    }
-}
+// endregion

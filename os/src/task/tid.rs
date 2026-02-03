@@ -1,6 +1,6 @@
 use alloc::{vec, vec::Vec};
 
-use crate::mutex::NoPreemptSpinLock;
+use crate::mutex::SpinLock;
 
 pub struct TaskIdAllocator {
     current: usize,
@@ -50,16 +50,16 @@ impl TaskId {
 impl Drop for TaskId {
     fn drop(&mut self) {
         unsafe {
-            TID_ALLOC.lock().free(self.inner);
+            TID_ALLOC.lock_no_preempt().free(self.inner);
         }
     }
 }
 
-pub static TID_ALLOC: NoPreemptSpinLock<TaskIdAllocator> =
-    NoPreemptSpinLock::new(TaskIdAllocator::new());
+pub static TID_ALLOC: SpinLock<TaskIdAllocator> =
+    SpinLock::new(TaskIdAllocator::new());
 
 pub fn alloc_tid() -> TaskId {
     TaskId {
-        inner: unsafe { TID_ALLOC.lock().alloc() },
+        inner: unsafe { TID_ALLOC.lock_no_preempt().alloc() },
     }
 }

@@ -239,6 +239,3 @@ macro_rules! define_struct {
         $crate::impl_basic!($name, $type);
     };
 }
-
-define_struct!(counter, A, usize);
-define_struct!(number, B, usize);

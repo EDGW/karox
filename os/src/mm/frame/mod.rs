@@ -6,7 +6,7 @@
 use crate::{
     arch::{MAX_PHYS_ADDR, mm::PageNum},
     devices::device_info::MemoryAreaInfo,
-    mutex::{NoPreemptSpinLock, no_preempt::NoPreemptSpinLockGuard},
+    mutex::{SpinLock, spin::NoPreemptSpinLockGuard},
 };
 use alloc::{vec, vec::Vec};
 use core::ops::Range;
@@ -42,20 +42,20 @@ pub trait FrameAllocator: Send {
 ///
 /// For unsafe operations, use [LockedFrameAllocator::lock] to get a mutex guard to the internal allocator.
 pub struct LockedFrameAllocator<TAlloc: FrameAllocator> {
-    alloc: NoPreemptSpinLock<TAlloc>,
+    alloc: SpinLock<TAlloc>,
 }
 impl<TAlloc: FrameAllocator> LockedFrameAllocator<TAlloc> {
     /// Create a new locked allocator.
     #[inline(always)]
     pub const fn new(alloc: TAlloc) -> LockedFrameAllocator<TAlloc> {
         LockedFrameAllocator {
-            alloc: NoPreemptSpinLock::new(alloc),
+            alloc: SpinLock::new(alloc),
         }
     }
     /// Manually acquire the internal lock and get a guard to the allocator.
     #[inline(always)]
     pub fn lock(&self) -> NoPreemptSpinLockGuard<'_, TAlloc> {
-        self.alloc.lock()
+        self.alloc.lock_no_preempt()
     }
 
     /// Allocate a single frame safely.

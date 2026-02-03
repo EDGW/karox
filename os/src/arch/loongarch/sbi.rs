@@ -2,14 +2,13 @@
 #![allow(missing_docs)]
 
 use alloc::boxed::Box;
-use spin::Mutex;
 
 use crate::{
     arch::SBITrait,
     devices::serial::{Uart, uart16550::Uart16550},
 };
 
-static UART: Mutex<Option<Box<dyn Uart>>> = Mutex::<Option<Box<dyn Uart>>>::new(None);
+static UART: SpinLock<Option<Box<dyn Uart>>> = SpinLock::<Option<Box<dyn Uart>>>::new(None);
 
 pub struct SBITable;
 

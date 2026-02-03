@@ -1,10 +1,10 @@
 // TODO: Temporarily Used
 #![allow(missing_docs)]
 
-use crate::{arch::SbiTable, mutex::NoPreemptSpinLock};
+use crate::{arch::SbiTable, mutex::SpinLock};
 use core::fmt::{Arguments, Error, Write};
 
-static CON_LOCK: NoPreemptSpinLock<()> = NoPreemptSpinLock::new(());
+static CON_LOCK: SpinLock<()> = SpinLock::new(());
 
 struct SerialOut;
 
@@ -18,7 +18,7 @@ impl Write for SerialOut {
 }
 
 pub fn serial_print(args: Arguments) {
-    let guard = CON_LOCK.lock();
+    let guard = CON_LOCK.lock_no_preempt();
     SerialOut.write_fmt(args).unwrap();
     drop(guard);
 }
