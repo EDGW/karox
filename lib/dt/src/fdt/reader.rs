@@ -2,7 +2,7 @@ use core::{mem::swap, ops::Range};
 
 use crate::{
     fdt::{FdtHeader, FdtNodeType, ReservedMemoryEntry},
-    node::{DeviceTree, Node},
+    node::{DeviceTree, Node, NodeType},
     prop::Property,
 };
 use alloc::{boxed::Box, slice, vec, vec::Vec};
@@ -261,6 +261,7 @@ impl FdtReader {
             unit_addr: Box::from(unit_addr),
             children,
             props,
+            node_type: NodeType::Device,
         };
         self.nodes.push(node);
         Ok(id)
@@ -327,6 +328,18 @@ impl FdtReader {
             mem_rsv_map: self.get_mem_rsv_map()?,
         };
         swap(&mut self.nodes, &mut tree.container);
+        if let Some(node) = tree.get_node_mut("/aliases") {
+            node.node_type = NodeType::Description;
+        }
+        tree.get_nodes_mut("/memory", |node| {
+            node.node_type = NodeType::Description;
+        });
+        if let Some(node) = tree.get_node_mut("/reserved-memory") {
+            node.node_type = NodeType::Description;
+        }
+        if let Some(node) = tree.get_node_mut("/chosen") {
+            node.node_type = NodeType::Description;
+        }
         Ok(tree)
     }
 

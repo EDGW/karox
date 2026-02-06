@@ -1,4 +1,3 @@
-
 use bitflags::bitflags;
 
 use crate::dev::{mmio::Register, serial::Uart};
@@ -34,7 +33,6 @@ impl Uart16550 {
 }
 
 impl Uart for Uart16550 {
-    
     fn flush(&mut self) {}
 
     fn read(&mut self) -> Option<u8> {

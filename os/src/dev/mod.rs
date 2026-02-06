@@ -6,8 +6,8 @@ pub mod io;
 pub mod mmio;
 pub mod serial;
 
-mod devices;
-pub use devices::*;
+mod dev;
+pub use dev::*;
 mod mem;
 pub use mem::*;
 mod hart;

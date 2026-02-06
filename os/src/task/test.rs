@@ -11,11 +11,11 @@ use crate::{
 
 pub fn add_test_tasks() {
     debug_ex!("Adding test tasks...");
-    unsafe {
+    /*unsafe {
         for _ in 0..3000 {
             add_to_current(test_fn as *const ());
         }
-    }
+    }*/
     debug_ex!("Test tasks added...");
 }
 

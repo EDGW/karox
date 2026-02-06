@@ -1,7 +1,7 @@
 use core::ops::Range;
 
 use crate::prop::{Property, PropertyError};
-use alloc::{boxed::Box, vec, vec::Vec};
+use alloc::{boxed::Box, string::String, vec, vec::Vec};
 use utils::endian::{BigEndian32, EndianData};
 pub struct DeviceTree {
     pub root_id: usize,
@@ -17,11 +17,28 @@ pub struct Node {
     pub unit_addr: Box<str>,
     pub children: Vec<usize>,
     pub props: Vec<Property>,
+    pub node_type: NodeType,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum NodeType {
+    Device,
+    Description,
 }
 
 impl DeviceTree {
     pub fn is_root(&self, node: &Node) -> bool {
         self.get_parent(node).node_id == node.node_id
+    }
+    fn full_path(&self, node: &Node) -> String {
+        if self.is_root(node) {
+            return String::from("");
+        } else {
+            return self.full_path(self.get_parent(node)) + "/" + node.full_name.as_ref();
+        }
+    }
+    pub fn get_full_path(&self, node: &Node) -> Box<str> {
+        self.full_path(node).into_boxed_str()
     }
     pub fn get_parent(&self, node: &Node) -> &Node {
         &self.container[node.parent_id]
@@ -47,7 +64,7 @@ impl DeviceTree {
             }
             let mut found = false;
             for subnode in self.get_children(node) {
-                if subnode.full_name.as_ref().eq(path_str) {
+                if subnode.full_name.as_ref().eq(section) {
                     node = subnode;
                     found = true;
                     break;
@@ -59,11 +76,45 @@ impl DeviceTree {
         }
         Some(node)
     }
+    pub fn get_node_mut<'b>(&'b mut self, path: impl AsRef<str>) -> Option<&'b mut Node> {
+        let path_str = path.as_ref();
+        let mut node = &mut self.container[self.root_id] as *mut Node;
+        for section in path_str.split('/') {
+            if section.trim().is_empty() {
+                continue;
+            }
+            let mut found = false;
+            for subnode_id in &unsafe { &*node }.children {
+                let subnode = &self.container[*subnode_id];
+                if subnode.full_name.as_ref().eq(section) {
+                    node = &mut self.container[*subnode_id];
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return None;
+            }
+        }
+        Some(unsafe { node.as_mut() }.unwrap())
+    }
     pub fn get_nodes(&self, path: impl AsRef<str>) -> Vec<&Node> {
         let path_str = path.as_ref();
         let root = &self.container[self.root_id];
         let mut path = path_str.split('/').collect();
         self.get_sub_nodes(root, &mut path, 0)
+    }
+    pub fn get_nodes_mut<F: Fn(&mut Node) -> ()>(&mut self, path: impl AsRef<str>, f: F) {
+        let paths: Vec<Box<str>> = self
+            .get_nodes(path)
+            .iter()
+            .map(|x| self.get_full_path(x))
+            .collect();
+        for path in paths {
+            if let Some(node) = self.get_node_mut(path) {
+                f(node);
+            }
+        }
     }
     fn get_sub_nodes<'a, 'b>(
         &'b self,

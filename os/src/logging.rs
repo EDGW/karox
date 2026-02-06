@@ -1,6 +1,12 @@
+use crate::{
+    backgr, bright,
+    console::{
+        colors::{BLACK, GREEN, RED, WHITE, YELLOW},
+        styles::ITALIC,
+    },
+    panic_init,
+};
 use log::{Level, LevelFilter, Log, Metadata, Record, set_logger, set_max_level};
-
-use crate::panic_init;
 
 pub struct Logger;
 
@@ -13,16 +19,16 @@ impl Log for Logger {
         if !self.enabled(record.metadata()) {
             return;
         }
-        let color = match record.level() {
-            Level::Error => 31, // Red
-            Level::Warn => 93,  // BrightYellow
-            Level::Info => 20,  // White
-            Level::Debug => 32, // Green
-            Level::Trace => 90, // BrightBlack
+        let color_str = match record.level() {
+            Level::Error => format_args!("{}{}", ansi_color!(WHITE), ansi_color!(backgr!(RED))), // Red
+            Level::Warn => ansi_color!(ITALIC, YELLOW),
+            Level::Info => ansi_color!(WHITE),           // White
+            Level::Debug => ansi_color!(GREEN),          // Green
+            Level::Trace => ansi_color!(bright!(BLACK)), // BrightBlack
         };
         kserial_println!(
-            "\u{1B}[{}m[{:}] {}\u{1B}[0m",
-            color,
+            "{}[{:}] {}\u{1B}[0m",
+            color_str,
             record.level(),
             record.args(),
         );
@@ -43,40 +49,40 @@ pub fn init() {
 macro_rules! debug_ex {
     // debug!(logger: my_logger, target: "my_target", key1 = 42, key2 = true; "a {} event", "log")
     // debug!(logger: my_logger, target: "my_target", "a {} event", "log")
-    (logger: $logger:expr, target: $target:expr, $($arg:tt)+) => {
+    (logger: $logger:expr, target: $target:expr, $fmt: literal $(, $($arg: tt)+)?) => {
         #[cfg(debug_assertions)]
         {
             use log::{log,Level};
-            log!(logger: __log_logger!($logger), target: $target, Level::Debug, $($arg)+)
+            log!(logger: __log_logger!($logger), target: $target, Level::Debug, concat!("[Hart #{}]",$fmt),$crate::arch::hart::get_current_hart_id() $(, $($arg)+)?)
         }
     };
 
     // debug!(logger: my_logger, key1 = 42, key2 = true; "a {} event", "log")
     // debug!(logger: my_logger, "a {} event", "log")
-    (logger: $logger:expr, $($arg:tt)+) => {
+    (logger: $logger:expr, $fmt: literal $(, $($arg: tt)+)?) => {
         #[cfg(debug_assertions)]
         {
             use log::{log,Level};
-            log!(logger: __log_logger!($logger), Level::Debug, $($arg)+)
+            log!(logger: __log_logger!($logger), Level::Debug, concat!("[Hart #{}]",$fmt),$crate::arch::hart::get_current_hart_id() $(, $($arg)+)?)
         }
     };
 
     // debug!(target: "my_target", key1 = 42, key2 = true; "a {} event", "log")
     // debug!(target: "my_target", "a {} event", "log")
-    (target: $target:expr, $($arg:tt)+) => {
+    (target: $target:expr, $fmt: literal $(, $($arg: tt)+)?) => {
         #[cfg(debug_assertions)]
         {
             use log::{log,Level};
-            log!(target: $target, Level::Debug, $($arg)+)
+            log!(target: $target, Level::Debug, concat!("[Hart #{}]",$fmt),$crate::arch::hart::get_current_hart_id() $(, $($arg)+)?)
         }
     };
 
     // debug!("a {} event", "log")
-    ($($arg:tt)+) => {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
         #[cfg(debug_assertions)]
         {
             use log::{log,Level};
-            log!(Level::Debug, $($arg)+)
+            log!(Level::Debug, concat!("(#{}) ", $fmt),$crate::arch::hart::get_current_hart_id() $(, $($arg)+)?)
         }
-    }
+    };
 }

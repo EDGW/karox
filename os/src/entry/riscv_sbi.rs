@@ -15,7 +15,8 @@ use crate::{
         mm::{BOOT_STACK, paging::BOOT_PTABLE},
         symbols::_ekernel,
     },
-    dev::{get_working_harts, info::dt::register_devs},
+    debug_ex,
+    dev::{get_working_harts, info::dt::register_all},
     early_init_main,
     entry::shared::clear_bss,
     kernel_main, kernel_slave,
@@ -132,10 +133,11 @@ unsafe extern "C" fn setup(hart_id: usize, dtb_addr: usize) -> ! {
 fn start(hart_id: usize, dtb_addr: usize) -> ! {
     store_hart_id(hart_id);
     if dtb_addr != 0 {
-        start_main(hart_id, dtb_addr);
         // Main Hart
+        start_main(hart_id, dtb_addr);
     } else {
         // Slave Hart
+        debug_ex!("karox RISC-V slave entry(hart: #{}).", hart_id);
         kernel_slave();
     }
 }
@@ -143,13 +145,18 @@ fn start(hart_id: usize, dtb_addr: usize) -> ! {
 fn start_main(hart_id: usize, dtb_addr: usize) -> ! {
     clear_bss();
     early_init_main();
+    debug_ex!(
+        "karox RISC-V main entry(hart: #{}, dtb: {:#x}).",
+        hart_id,
+        dtb_addr
+    );
 
     let mut reader = FdtReader::new(dtb_addr as *const u8);
     let dev_tree = reader
         .read()
         .unwrap_or_else(|err| panic_init!("Error loading FDT: {:?}", err));
 
-    register_devs(dev_tree);
+    register_all(dev_tree);
 
     for hart in get_working_harts() {
         if hart.hart_id == hart_id {
