@@ -1,14 +1,14 @@
 use crate::{
     arch::{KERNEL_OFFSET, MAX_HARTS, task::context::TaskContext, trap::context::TrapContext},
     mm::{frame::FrameAllocatorError, space::MemSpace, stack::KernelStack},
-    sync::LocalCell,
     task::{
-        hart::{HART_INFO, HartInfo},
+        processor::{PROCESSORS, Processor},
         tid::{TaskId, alloc_tid},
     },
 };
 use alloc::sync::Arc;
 use spin::RwLock;
+use utils::sync::LocalCell;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -51,12 +51,7 @@ impl Task {
         let inner = TaskInner {
             task_context: TaskContext::uninitialized(),
             trap_context: TrapContext::zero_from_entry(
-                entry,
-                hart_id,
-                true,
-                kstack_top,
-                kstack_top,
-                &HART_INFO[hart_id] as *const HartInfo as usize,
+                entry, hart_id, true, kstack_top, kstack_top, hart_id,
             ),
             hart_id,
         };
@@ -109,8 +104,8 @@ impl Task {
     /// Get the hart info of this task.
     /// **This function is UP-Safe and cannot be preempted.
     ///   Wrap the function in [super::preempt::disable_preempt()] and [super::preempt::restore_preempt()] if needed**
-    pub unsafe fn get_hart_info(&self) -> &'static HartInfo {
-        unsafe { &HART_INFO[self.inner.exclusive_access().hart_id] }
+    pub unsafe fn get_hart_info(&self) -> &'static Processor {
+        unsafe { &PROCESSORS[self.inner.exclusive_access().hart_id] }
     }
 }
 

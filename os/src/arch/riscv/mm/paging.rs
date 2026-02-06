@@ -4,7 +4,7 @@ use crate::{
         mm::{PageNum, sv::SATP_MODE},
         symbols::{_ebss, _edata, _erodata, _etext, _sbss, _sdata, _srodata, _stext},
     },
-    impl_basic,
+    debug_ex,
     mm::{
         config::PTABLE_ENTRY_COUNT,
         frame::{FRAME_ALLOC, Frame, FrameAllocatorError},
@@ -23,6 +23,7 @@ use core::{
 };
 use lazy_static::lazy_static;
 use riscv::register::satp;
+use utils::impl_basic;
 
 // region: PageTableFlags
 bitflags! {
@@ -360,6 +361,7 @@ lazy_static! {
 
 fn create_kernel_ptable() -> Result<PageTable, PagingError> {
     // kernel sections
+    debug_ex!("Creating Kernel Page Table...");
     let sections = [
         (
             Range {
@@ -410,13 +412,16 @@ fn create_kernel_ptable() -> Result<PageTable, PagingError> {
             baseflags | perm,
         )?;
     }
+    debug_ex!("Kernel Page Table Created.");
     Ok(table)
 }
 
 // endregion
 
 pub fn init() {
+    debug_ex!("Initializing paging module in RISC-V.");
     unsafe {
         set_memspace(&KERNEL_MEMSPACE as &MemSpace);
     }
+    debug_ex!("Paging module in RISC-V initialized.");
 }

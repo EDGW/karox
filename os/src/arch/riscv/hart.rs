@@ -1,25 +1,20 @@
 use core::arch::asm;
 
-use crate::{
-    arch::SbiTable,
-    panic_init,
-    task::hart::{HART_INFO, HartInfo},
-};
+use crate::{arch::SbiTable, panic_init};
 
-pub fn init_hart_info(hart_id: usize) {
-    let hart_info = &HART_INFO[hart_id] as *const HartInfo;
+pub fn store_hart_id(hart_id: usize) {
     unsafe {
-        asm!("mv tp, {}",in(reg) hart_info);
+        asm!("mv tp, {}",in(reg) hart_id);
     }
 }
 
 /// Get the hart info.
-pub fn get_hart_info() -> &'static HartInfo {
+pub fn get_current_hart_id() -> usize {
     let tp_value: usize;
     unsafe {
         asm!("mv {}, tp",out(reg) tp_value);
-        &*(tp_value as *const HartInfo)
     }
+    tp_value
 }
 
 /// Call from the main hart and wake slave harts.

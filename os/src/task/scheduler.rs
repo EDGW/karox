@@ -1,15 +1,16 @@
 use crate::{
-    arch::{MAX_HARTS, hart::get_hart_info, task::switch::__switch},
+    arch::{MAX_HARTS, hart::get_current_hart_id, task::switch::__switch},
+    dev::get_current_hart,
     sched::{DefaultScheduler, Scheduler},
-    sync::LocalCell,
     task::{
         get_current_sched_context, get_current_sched_context_mut, get_current_task,
-        hart::HART_INFO, scheduler::test::add_test_tasks,
+        processor::PROCESSORS, scheduler::test::add_test_tasks,
     },
 };
 use core::array;
 use lazy_static::lazy_static;
 use riscv::register::sscratch;
+use utils::sync::LocalCell;
 
 #[path = "test.rs"]
 pub mod test;
@@ -20,15 +21,12 @@ lazy_static! {
 }
 
 pub fn run_tasks() -> ! {
-    let hart_info = get_hart_info();
+    let hart_id = get_current_hart_id();
     add_test_tasks();
     loop {
         unsafe {
-            let task = SCHEDULERS[hart_info.hart_id].exclusive_access().fetch_new();
-            HART_INFO[hart_info.hart_id]
-                .inner
-                .exclusive_access()
-                .running_task = Some(task.clone());
+            let task = SCHEDULERS[hart_id].exclusive_access().fetch_new();
+            PROCESSORS[hart_id].inner.exclusive_access().running_task = Some(task.clone());
             let cur_context = get_current_sched_context_mut();
             let next_context = task.get_task_context_ptr();
             sscratch::write(task.get_trap_context_ptr() as usize); // set sscratch
@@ -39,7 +37,7 @@ pub fn run_tasks() -> ! {
 
 /// Schedule. **Make sure interrupt is disabled before you call the scheduler**
 pub fn schedule() {
-    let hart_info = get_hart_info();
+    let hart_info = get_current_hart();
     if !hart_info.preempt.is_preempt_allowed() {
         hart_info.preempt.need_reschedule();
         return;

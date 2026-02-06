@@ -1,8 +1,9 @@
 use core::fmt::Debug;
 
+use utils::{impl_basic, impl_number};
+
 use crate::{
     arch::{KERNEL_OFFSET, PAGE_WIDTH},
-    impl_basic, impl_number,
 };
 
 // region: PageNum

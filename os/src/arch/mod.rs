@@ -14,6 +14,7 @@
 /// Declare a private module named `arch_name` if the `target_arch` is `arch_str`, and automatically use all the members within.
 ///
 /// Use this macro to prevent from using hard-coded module names to referencing an arch
+#[macro_export]
 macro_rules! define_arch {
     ($arch_name:ident, $arch_str:literal) => {
         #[cfg(target_arch = $arch_str)]
@@ -26,5 +27,4 @@ macro_rules! define_arch {
 define_arch!(riscv, "riscv64");
 define_arch!(loongarch, "loongarch64");
 
-pub mod endian;
 pub mod symbols;

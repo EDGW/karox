@@ -4,7 +4,9 @@
 
 #![allow(unused)]
 
-use crate::{arch::mm::PageNum, devices::device_info::MemoryAreaInfo, mm::frame::FrameAllocator};
+use core::ops::Range;
+
+use crate::{arch::mm::PageNum, mm::frame::FrameAllocator};
 
 /// Maximum order for the buddy system.
 pub const MAX_ORDER: usize = 32;
@@ -31,7 +33,7 @@ impl FrameAllocator for BuddyFrameAllocator {
     unsafe fn dealloc(&mut self, ppn: PageNum, count: usize) {
         self.inner.dealloc(ppn.into(), count);
     }
-    fn add_frame(&mut self, general_mem: MemoryAreaInfo) {
+    fn add_frame(&mut self, general_mem: Range<usize>) {
         let start = PageNum::from_addr(general_mem.start);
         let end = PageNum::from_addr(general_mem.end);
         self.inner.add_frame(start.into(), end.into());

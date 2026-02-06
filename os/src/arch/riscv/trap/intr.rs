@@ -7,7 +7,7 @@ use riscv::{
     register::{scause::Interrupt, sie, sstatus, time},
 };
 
-pub const TIMER_TICK: usize = 0x1000;
+pub const TIMER_TICK: usize = 0x4000;
 
 pub fn intr_handler(intr_type: Interrupt, _context: &mut TrapContext) {
     match intr_type {

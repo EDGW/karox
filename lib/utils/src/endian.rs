@@ -43,13 +43,21 @@ pub trait EndianData<T>: Copy + Clone {
 }
 
 /// Get whether the current architecture is big endian
-#[cfg(any(target_arch = "riscv64", target_arch = "loongarch64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "loongarch64",
+    target_arch = "x86_64"
+))]
 macro_rules! arch_is_big_endian {
     () => {
         false
     };
 }
-#[cfg(not(any(target_arch = "loongarch64", target_arch = "riscv64")))]
+#[cfg(not(any(
+    target_arch = "loongarch64",
+    target_arch = "riscv64",
+    target_arch = "x86_64"
+)))]
 macro_rules! arch_is_big_endian {
     () => {
         compile_error!("Unsupported architecture!");

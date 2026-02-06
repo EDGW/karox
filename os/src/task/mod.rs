@@ -19,17 +19,17 @@
 //! * Initializing Environment: This refers to when the operating system is still initializing.
 
 use crate::{
-    arch::{hart::get_hart_info, task::context::TaskContext},
-    devices::device_info::DeviceInfo,
+    arch::task::context::TaskContext,
     task::{
         preempt::{disable_preempt, restore_preempt},
+        processor::get_current_processor_context,
         task::Task,
     },
 };
 use alloc::sync::Arc;
 
-pub mod hart;
 pub mod preempt;
+pub mod processor;
 pub mod scheduler;
 pub mod task;
 pub mod tid;
@@ -37,7 +37,7 @@ pub mod tid;
 /// Get the current running task.
 pub fn get_current_task() -> Arc<Task> {
     disable_preempt();
-    let inner = unsafe { get_hart_info().inner.access() };
+    let inner = unsafe { get_current_processor_context().inner.access() };
     let res = inner.running_task.as_ref().unwrap().clone();
     drop(inner);
     restore_preempt();
@@ -47,7 +47,7 @@ pub fn get_current_task() -> Arc<Task> {
 /// Get a pointer to the scheduling context of the current hart.
 pub fn get_current_sched_context() -> *const TaskContext {
     disable_preempt();
-    let inner = unsafe { get_hart_info().inner.access() };
+    let inner = unsafe { get_current_processor_context().inner.access() };
     let res = &inner.sched_context as *const TaskContext;
     drop(inner);
     restore_preempt();
@@ -57,14 +57,9 @@ pub fn get_current_sched_context() -> *const TaskContext {
 /// Get a mutable pointer to the scheduling context of the current hart.
 pub fn get_current_sched_context_mut() -> *mut TaskContext {
     disable_preempt();
-    let mut inner = unsafe { get_hart_info().inner.exclusive_access() };
+    let mut inner = unsafe { get_current_processor_context().inner.exclusive_access() };
     let res = &mut inner.sched_context as *mut TaskContext;
     drop(inner);
     restore_preempt();
     res
-}
-
-/// Initialize
-pub fn init(dev_info: &impl DeviceInfo) {
-    hart::init(dev_info);
 }

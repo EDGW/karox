@@ -2,8 +2,9 @@
 //!
 //! It's the earliest-initialized module because the kernel cannot run without heap allocation
 
-use crate::{define_struct, mm::config::KERNEL_HEAP_SIZE};
+use crate::mm::config::KERNEL_HEAP_SIZE;
 use buddy_system_allocator::LockedHeap;
+use utils::define_struct;
 
 // Packed type for heap space.
 // It's a huge struct aligned to a page

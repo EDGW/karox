@@ -5,10 +5,11 @@
 
 use crate::{
     arch::{MAX_PHYS_ADDR, mm::PageNum},
-    devices::device_info::MemoryAreaInfo,
+    debug_ex,
+    dev::get_general_memory,
     mutex::{SpinLock, spin::NoPreemptSpinLockGuard},
 };
-use alloc::{vec, vec::Vec};
+use alloc::vec;
 use core::ops::Range;
 
 mod buddy;
@@ -20,7 +21,7 @@ pub use managed::*;
 /// Trait for frame allocators that is **not promised to be safe.**
 pub trait FrameAllocator: Send {
     /// Add a memory area as available frames.
-    fn add_frame(&mut self, mem_area: MemoryAreaInfo);
+    fn add_frame(&mut self, mem_area: Range<usize>);
 
     /// Allocate **contiguous** frames.
     /// The function is **unsafe** because unfreed frames may lead to memory leaks.
@@ -118,8 +119,11 @@ pub static FRAME_ALLOC: LockedFrameAllocator<DefaultFrameAllocator> =
     LockedFrameAllocator::new(DefaultFrameAllocator::new());
 
 /// Initialize global allocator from memory areas (trim areas exceeding [Paging::MAX_PHYSICAL_ADDR]).
-pub fn init(general_mem: &Vec<MemoryAreaInfo>) {
-    for area in general_mem {
+pub fn init() {
+    debug_ex!("Initializing frame allocators...");
+    let general_mem = get_general_memory();
+    for area in general_mem.iter() {
+        debug_ex!("Adding memory area [{:#x},{:#x})", area.start, area.end);
         let mut guard = FRAME_ALLOC.lock();
         let start = area.start;
         let end = area.end;
@@ -127,7 +131,7 @@ pub fn init(general_mem: &Vec<MemoryAreaInfo>) {
         if end <= max_addr {
             guard.add_frame(area.clone());
         } else if start <= max_addr && end > max_addr {
-            guard.add_frame(MemoryAreaInfo {
+            guard.add_frame(Range {
                 start,
                 end: max_addr,
             });
@@ -136,6 +140,7 @@ pub fn init(general_mem: &Vec<MemoryAreaInfo>) {
             // Ignore areas exceeding MAX_ADDR
         }
     }
+    debug_ex!("Frame allocators initialized.");
 }
 
 // endregion

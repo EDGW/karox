@@ -28,7 +28,7 @@ impl StackFrameAllocator {
 }
 /// [FrameAllocator] trait implementation for stack-based allocation.
 impl FrameAllocator for StackFrameAllocator {
-    fn add_frame(&mut self, general_mem: crate::devices::device_info::MemoryAreaInfo) {
+    fn add_frame(&mut self, general_mem: Range<usize>) {
         self.free.push(Range {
             start: general_mem.start / PAGE_SIZE,
             end: general_mem.end / PAGE_SIZE,

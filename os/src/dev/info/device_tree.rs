@@ -1,8 +1,6 @@
 use core::{any::type_name, fmt::Debug, ops::Range, usize};
-
 use alloc::{boxed::Box, slice, vec, vec::Vec};
 use spin::rwlock::RwLock;
-
 use crate::{
     arch::{
         endian::EndianData,
@@ -437,6 +435,10 @@ where
 
     fn get_hart_info(&self) -> Result<&Vec<super::HartInfo>, Self::TError> {
         Ok(&self.get_devices()?.harts)
+    }
+    
+    fn register_devs(&self) -> Result<(), Self::TError> {
+        todo!()
     }
 }
 

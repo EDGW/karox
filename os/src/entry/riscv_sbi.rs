@@ -8,24 +8,24 @@
 //! 4. jumping to [start]: clear the bss and create a fdt tree instance (uninitialized).
 //! 5. jumping to [crate::rust_main]
 
-use core::arch::naked_asm;
-
 use crate::{
     arch::{
         KERNEL_OFFSET, PAGE_WIDTH,
-        endian::EndianData,
-        hart::{init_hart_info, wake_slave_harts},
+        hart::{store_hart_id, wake_slave_harts},
         mm::{BOOT_STACK, paging::BOOT_PTABLE},
         symbols::_ekernel,
     },
-    devices::device_info::{DeviceInfo, FdtTree},
+    dev::{get_working_harts, info::dt::register_devs},
     early_init_main,
     entry::shared::clear_bss,
     kernel_main, kernel_slave,
     mm::config::KERNEL_STACK_SHIFT,
     panic_init, phys_addr_from_symbol,
 };
+use core::{arch::naked_asm, ptr::copy};
+use dt::fdt::reader::FdtReader;
 use riscv::register::satp;
+use utils::endian::EndianData;
 
 /// Boot `satp` register value
 ///
@@ -65,20 +65,20 @@ unsafe extern "C" fn _start(hart_id: usize, dtb_addr: usize) {
 /// Do nothing if starting from a slave hart.
 #[inline(always)]
 fn adjust_dtb(hart_id: usize, dtb_addr: usize) -> ! {
-    unsafe {
-        if dtb_addr != 0 {
-            // Main Hart
-            let dtb = FdtTree::from_ptr(dtb_addr as *const u8);
-            let len = dtb.get_header().totalsize.value() as usize;
+    if dtb_addr != 0 {
+        // Main Hart
+        let reader = FdtReader::new(dtb_addr as *const u8);
+        let len = reader.get_header().totalsize.value() as usize;
 
-            let src = dtb.fdt_ptr as *const u8;
-            let dst = _ekernel as *const u8 as *mut u8;
-            for i in 0..len {
-                *(dst.add(i)) = *(src.add(i));
-            }
+        let src = dtb_addr as *const u8;
+        let dst = _ekernel as *const u8 as *mut u8;
+        unsafe {
+            copy(src, dst, len);
             setup(hart_id, dst as usize);
-        } else {
-            // Slave Hart
+        }
+    } else {
+        // Slave Hart
+        unsafe {
             setup(hart_id, 0);
         }
     }
@@ -130,7 +130,7 @@ unsafe extern "C" fn setup(hart_id: usize, dtb_addr: usize) -> ! {
 
 /// Write the hart info to `tp` register and jump to kernel main.
 fn start(hart_id: usize, dtb_addr: usize) -> ! {
-    init_hart_info(hart_id);
+    store_hart_id(hart_id);
     if dtb_addr != 0 {
         start_main(hart_id, dtb_addr);
         // Main Hart
@@ -142,19 +142,21 @@ fn start(hart_id: usize, dtb_addr: usize) -> ! {
 
 fn start_main(hart_id: usize, dtb_addr: usize) -> ! {
     clear_bss();
+    early_init_main();
 
-    let dev_info = FdtTree::from_ptr(dtb_addr as *const u8);
-    early_init_main(&dev_info);
+    let mut reader = FdtReader::new(dtb_addr as *const u8);
+    let dev_tree = reader
+        .read()
+        .unwrap_or_else(|err| panic_init!("Error loading FDT: {:?}", err));
 
-    for hart in dev_info
-        .get_hart_info()
-        .unwrap_or_else(|err| panic_init!("Error getting hart info: {:?}", err))
-    {
+    register_devs(dev_tree);
+
+    for hart in get_working_harts() {
         if hart.hart_id == hart_id {
             continue;
         }
         wake_slave_harts(hart.hart_id, phys_addr_from_symbol!(_start));
     }
 
-    kernel_main(dev_info);
+    kernel_main();
 }

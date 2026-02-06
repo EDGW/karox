@@ -1,0 +1,10 @@
+[package]
+name = "dt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+utils.path = "../utils"
+spin.workspace = true
+bitflags.workspace = true
+log.workspace = true

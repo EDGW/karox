@@ -1,8 +1,6 @@
 use crate::{
-    arch::{
-        hart::get_hart_info,
-        trap::intr::{disable_intr, restore_intr},
-    },
+    arch::trap::intr::{disable_intr, restore_intr},
+    dev::get_current_hart,
     task::scheduler::schedule,
 };
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -78,12 +76,12 @@ impl PreemptCounter {
 }
 
 pub fn disable_preempt() {
-    let hart = get_hart_info();
+    let hart = get_current_hart();
     hart.preempt.disable();
 }
 
 /// Restore Preemption
 pub fn restore_preempt() {
-    let hart = get_hart_info();
+    let hart = get_current_hart();
     hart.preempt.restore();
 }

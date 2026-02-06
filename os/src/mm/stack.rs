@@ -1,5 +1,6 @@
+use utils::define_struct;
+
 use crate::{
-    define_struct,
     mm::{
         config::{KERNEL_STACK_PAGES, KERNEL_STACK_SIZE},
         frame::{FRAME_ALLOC, FrameAllocatorError, FrameRange},

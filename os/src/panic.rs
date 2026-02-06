@@ -1,12 +1,11 @@
-use log::error;
-
-use crate::arch::hart::get_hart_info;
+use crate::arch::hart::get_current_hart_id;
 use core::panic::PanicInfo;
+use log::error;
 
 #[panic_handler]
 pub fn panic_handler(pinfo: &PanicInfo) -> ! {
     error!("{:}", pinfo);
-    error!("Panic on hart #{:}.", get_hart_info().hart_id);
+    error!("Panic on hart #{:}.", get_current_hart_id());
     loop {}
 }
 

@@ -6,6 +6,8 @@
 //!
 //! A [PageTable] contains a root [PageDir] and provides functions to manage the page table.
 
+use utils::num::AlignableTo;
+
 use crate::{
     arch::{
         self, PTABLE_MAX_LEVEL,
@@ -13,12 +15,10 @@ use crate::{
             PageNum,
             paging::{PageDir, PageTableFlags},
         },
-    },
-    mm::{
+    }, debug_ex, mm::{
         config::PTABLE_ENTRY_COUNT,
         frame::{FRAME_ALLOC, FrameAllocatorError},
-    },
-    utils::num::AlignableTo,
+    }
 };
 use core::fmt::Debug;
 
@@ -559,7 +559,9 @@ unsafe fn map_pages_internal(
 // endregion
 
 pub fn init() {
+    debug_ex!("Initializing paging module...");
     arch::mm::paging::init();
+    debug_ex!("Paging module initialized...");
 }
 
 // region: Errors

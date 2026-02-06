@@ -1,4 +1,4 @@
-use crate::{devices::device_info::DeviceInfo, panic_init};
+use crate::debug_ex;
 
 pub mod config;
 pub mod frame;
@@ -8,13 +8,11 @@ pub mod space;
 pub mod stack;
 
 /// Initializes the memory management module.
-pub fn init(device_info: &impl DeviceInfo) {
-    frame::init(
-        device_info
-            .get_mem_info()
-            .unwrap_or_else(|err| panic_init!("Error getting memory info {:?}", err)),
-    );
+pub fn init() {
+    debug_ex!("Initializing memory management module...");
+    frame::init();
     paging::init();
+    debug_ex!("Memory management module initialized.");
 }
 
 /// Initializes the memory management module as a slave hart.

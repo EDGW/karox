@@ -1,19 +1,8 @@
 //! Macros for defining packed structs with various attributes and behaviors.
 
 #[macro_export]
-macro_rules! impl_basic {
+macro_rules! impl_deref{
     ($name: ident, $type: ty) => {
-        impl core::convert::From<$type> for $name {
-            fn from(value: $type) -> Self {
-                $name { inner: value }
-            }
-        }
-        impl core::convert::Into<$type> for $name {
-            fn into(self) -> $type {
-                self.inner
-            }
-        }
-
         impl core::ops::Deref for $name {
             type Target = $type;
 
@@ -27,6 +16,26 @@ macro_rules! impl_basic {
                 &mut self.inner
             }
         }
+    };
+}
+#[macro_export]
+macro_rules! impl_conversion{
+    ($name: ident, $type: ty) => {
+        impl core::convert::From<$type> for $name {
+            fn from(value: $type) -> Self {
+                $name { inner: value }
+            }
+        }
+        impl core::convert::Into<$type> for $name {
+            fn into(self) -> $type {
+                self.inner
+            }
+        }
+    };
+}
+#[macro_export]
+macro_rules! impl_const_conversion{
+    ($name: ident, $type: ty) => {
         impl $name{
             pub const fn from_const(value: $type) -> Self {
                 $name { inner: value }
@@ -35,6 +44,15 @@ macro_rules! impl_basic {
                 self.inner
             }
         }
+    };
+}
+
+#[macro_export]
+macro_rules! impl_basic {
+    ($name: ident, $type: ty) => {
+        $crate::impl_deref!($name, $type);
+        $crate::impl_conversion!($name, $type);
+        $crate::impl_const_conversion!($name, $type);
     };
 }
 
