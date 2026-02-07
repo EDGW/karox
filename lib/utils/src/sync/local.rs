@@ -1,5 +1,8 @@
 //! Uniprocessor interior mutability primitives
-use core::{cell::{Ref, RefCell, RefMut}, fmt::Debug};
+use core::{
+    cell::{Ref, RefCell, RefMut},
+    fmt::Debug,
+};
 
 /// Wrap a static data structure inside it so that we are
 /// able to access it without any `unsafe`.
@@ -8,7 +11,7 @@ use core::{cell::{Ref, RefCell, RefMut}, fmt::Debug};
 ///
 /// In order to get mutable reference of inner data, call
 /// `exclusive_access`.
-/// 
+///
 /// It's adapted from `UPSafeCell` in rCore project, and renamed.
 pub struct LocalCell<T> {
     /// inner data
@@ -36,8 +39,10 @@ impl<T> LocalCell<T> {
     }
 }
 
-impl<T:Debug> Debug for LocalCell<T>{
+impl<T: Debug> Debug for LocalCell<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("UPSafeCell").field("inner", &self.inner).finish()
+        f.debug_struct("UPSafeCell")
+            .field("inner", &self.inner)
+            .finish()
     }
 }

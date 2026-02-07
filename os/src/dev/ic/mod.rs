@@ -1,6 +1,7 @@
 //! Interrupt Controller Module
 
-mod ic;
-pub use ic::*;
-
 define_arch!(riscv, "riscv64");
+
+pub fn register_drivers(){
+    register_drivers_arch();
+}

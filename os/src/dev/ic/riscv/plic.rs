@@ -1,4 +1,8 @@
-use crate::dev::mmio::Register;
+use core::fmt::Debug;
+
+use alloc::boxed::Box;
+
+use crate::dev::{DeviceHandle, driver::Driver, mmio::Register};
 
 /// Platform-Level Interrupt Controller Register Map
 #[repr(C)]
@@ -46,4 +50,29 @@ impl PLIntrController {
     pub fn complete(&self, cxt_id: usize, irq_id: u32) {
         self.registers.contexts[cxt_id].claim_comp.write(irq_id);
     }
+}
+
+pub struct PLICDriver;
+impl PLICDriver {
+    pub fn new() -> PLICDriver {
+        PLICDriver
+    }
+}
+impl Driver for PLICDriver {
+    fn get_name(&self) -> &'static str {
+        "plic"
+    }
+
+    fn get_comp_strs(&self) -> &'static [&'static str] {
+        &["riscv,plic0"]
+    }
+
+    fn probe(&self, _dev: DeviceHandle) -> Result<(), Box<dyn Debug>> {
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum PLICDriverError {
+    Unrecognized,
 }

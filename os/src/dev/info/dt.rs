@@ -3,9 +3,12 @@
 use crate::{
     arch::symbols::{_ekernel, _skernel},
     debug_ex,
-    dev::{DEVICE_ROOT, DeviceRef, GENERAL_MEM, MemorySet, register_hart},
+    dev::{
+        DEVICE_ROOT, DeviceHandle, DeviceRef, DeviceType, GENERAL_MEM, MemorySet, register_hart,
+    },
     panic_init, phys_addr_from_symbol,
 };
+use alloc::{boxed::Box, vec};
 use dt::node::{DeviceTree, Node, NodeType};
 use log::warn;
 
@@ -89,36 +92,76 @@ fn register_harts(dev_tree: &DeviceTree) {
     }
     debug_ex!("Hart info registered.");
 }
+
 fn register_devices(dev_tree: &DeviceTree) {
     debug_ex!("Registering devices...");
     register_devices_by_node(
-        DEVICE_ROOT.create_ref(), 
+        DEVICE_ROOT.create_ref(),
         &dev_tree,
-        dev_tree.get_node("/")
-            .unwrap_or_else(||
-                {
-                    panic_init!("Error registering devices: Unable to fetch the root node.");
-                }
-            )
+        dev_tree.get_node("/").unwrap_or_else(|| {
+            panic_init!("Error registering devices: Unable to fetch the root node.");
+        }),
     );
     debug_ex!("Devices registered.");
 }
 
-fn register_devices_by_node(dev: DeviceRef, dev_tree: &DeviceTree,node: &Node) {
-    let handle = dev.get_handle()
-        .unwrap_or_else(||{ 
-        panic_init!("Error registering devices under node '{}': Unable to fetch the handle of the parent device.",node.full_name);
+fn register_devices_by_node(dev: DeviceRef, dev_tree: &DeviceTree, node: &Node) {
+    let handle: DeviceHandle = dev.get_handle().unwrap_or_else(|| { 
+        panic_init!(
+            "Error registering devices under node '{}': Unable to fetch the handle of the parent device.",
+            node.full_name
+        );
     });
-    for child in dev_tree.get_children(node){
-        if child.node_type == NodeType::Description{
-            debug_ex!("\tSkipped Description Node {}.",dev_tree.get_full_path(child));
+    for child in dev_tree.get_children(node) {
+        if child.node_type == NodeType::Description {
+            debug_ex!(
+                "\tSkipped Description Node {}.",
+                dev_tree.get_full_path(child)
+            );
             continue;
         }
-        let child_dev =handle.new_child(&child.full_name);
-        match child_dev.add(){
-            Err(err)=>warn!("Error adding device '{}' to its parent device: {:?}",dev_tree.get_full_path(child),err),
-            Ok(dev_ref)=>{
-                debug_ex!("\tRegistered device {}.",dev_tree.get_full_path(child));
+        // compatible list
+        let mut comp_list = vec![];
+        let comp_prop = dev_tree.get_property(child, "compatible");
+        if let Some(prop) = comp_prop {
+            match prop.value_as_strlist() {
+                Err(err) => {
+                    warn!(
+                        "Error adding device '{}' to its parent device: Unable to get 'compatible' property: {:?}",
+                        dev_tree.get_full_path(child),
+                        err
+                    );
+                    continue;
+                }
+                Ok(values) => {
+                    for val in values {
+                        comp_list.push(Box::from(val));
+                    }
+                }
+            }
+        }
+        // device type
+        let dev_type = if let Some(_) = dev_tree.get_property(child, "interrupt-controller") {
+            DeviceType::IntrController
+        } else if let Some(_) = comp_prop {
+            DeviceType::Device
+        } else {
+            DeviceType::Unspecified
+        };
+        // add device
+        let child_dev = handle.new_child(&child.full_name, comp_list, dev_type);
+        match child_dev.add() {
+            Err(err) => warn!(
+                "Error adding device '{}' to its parent device: {:?}",
+                dev_tree.get_full_path(child),
+                err
+            ),
+            Ok(dev_ref) => {
+                debug_ex!(
+                    "\tRegistered device {} [{:?}].",
+                    dev_tree.get_full_path(child),
+                    dev_ref.get_handle().unwrap().dev_type
+                );
                 register_devices_by_node(dev_ref, dev_tree, child);
             }
         }

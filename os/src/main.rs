@@ -60,6 +60,7 @@ pub fn kernel_main() -> ! {
     debug_ex!("karox running on hart #{:}.", get_current_hart_id());
     mm::init();
     trap::init();
+    dev::init();
     debug_ex!("Main hart initialized (#{:}).", get_current_hart_id());
 
     mark_init();
