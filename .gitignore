@@ -5,7 +5,7 @@
 /bin/
 /exclude/
 /runtime/
-name_rules
+name_rules.txt
 /.VSCodeCounter/
 *.dtb
 *.dts

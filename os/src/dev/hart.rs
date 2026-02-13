@@ -1,14 +1,17 @@
 use alloc::vec::Vec;
+use spin::{Once};
 use utils::vec::LockedVecStatic;
 
 use crate::{
     arch::{MAX_HARTS, hart::get_current_hart_id},
+    dev::{handle::Handle, intc::Intc},
     task::preempt::PreemptCounter,
 };
 
 pub struct HartInfo {
     pub hart_id: usize,
     pub preempt: PreemptCounter,
+    pub intc: Once<Handle<Intc>>,
 }
 
 impl HartInfo {
@@ -16,6 +19,7 @@ impl HartInfo {
         HartInfo {
             hart_id,
             preempt: PreemptCounter::new(),
+            intc: Once::new(),
         }
     }
 }

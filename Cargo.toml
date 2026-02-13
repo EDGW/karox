@@ -1,5 +1,5 @@
 [workspace]
-members = ["os", "user/karox_api", "user/init", "lib/utils", "lib/dt"]
+members = ["os", "lib/utils", "lib/dt"]
 resolver = "2"
 
 [workspace.dependencies]

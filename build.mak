@@ -5,9 +5,9 @@ export MIN_QEMU_VERSION:= 9.0.50		# Older QEMU Versions has FDT bugs on loongarc
 
 build:
 	@echo Bulding "$(BUILD_NAME)"...
-	make -C user build
-	mkdir -p $(RUNTIME)/user
-	cp $(CUR)/$(USER_DIR)/* $(RUNTIME)/user
+	# make -C user build
+	# mkdir -p $(RUNTIME)/user
+	# cp $(CUR)/$(USER_DIR)/* $(RUNTIME)/user
 	make -f mk-cfg/$(BUILD_NAME).mak pre_build
 	make -C os all	
 

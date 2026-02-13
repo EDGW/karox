@@ -1,12 +1,12 @@
-use core::ops::Range;
-
 use crate::prop::{Property, PropertyError};
-use alloc::{boxed::Box, string::String, vec, vec::Vec};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, string::String, vec, vec::Vec};
+use core::ops::Range;
 use utils::endian::{BigEndian32, EndianData};
 pub struct DeviceTree {
     pub root_id: usize,
     pub container: Vec<Node>,
     pub mem_rsv_map: Vec<Range<usize>>,
+    pub phandle_map: BTreeMap<usize, Box<str>>,
 }
 
 pub struct Node {
@@ -175,6 +175,59 @@ impl DeviceTree {
                 start: addr,
                 end: addr + sz,
             });
+        }
+        Ok(res)
+    }
+    fn get_intr_value(
+        &self,
+        intc: &Node,
+        data: &[BigEndian32],
+    ) -> Result<(usize, usize), PropertyError> {
+        let mut intr_cells = 1;
+        if let Some(prop) = self.get_property(intc, "#interrupt-cells") {
+            intr_cells = prop.value_as_u32()? as usize;
+        }
+        let mut val: usize = 0;
+        for idx in 0..intr_cells {
+            val = (val << 32) + data[idx].value() as usize;
+        }
+        Ok((intr_cells, val))
+    }
+    pub fn get_intr_info<'a>(
+        &'a self,
+        node: &Node,
+    ) -> Result<Vec<(usize, usize)>, PropertyError> {
+        let mut res = vec![];
+        if let Some(prop) = self.get_property(node, "interrupts-extended") {
+            let data = prop.value_as_proplist::<BigEndian32>()?;
+            let mut index = 0;
+            while index < data.len() {
+                let phandle = data[index].value() as usize;
+                let path = self
+                    .phandle_map
+                    .get(&phandle)
+                    .ok_or(PropertyError::DanglingHandle)?;
+                let node = self.get_node(path).ok_or(PropertyError::DanglingHandle)?;
+                let (value, step) = self.get_intr_value(node, &data[(index + 1)..data.len()])?;
+                index += step + 1;
+                res.push((phandle, value));
+            }
+        } else if let Some(parent) = self.get_property(node, "interrupt-parent")
+            && let Some(intrs) = self.get_property(node, "interrupts")
+        {
+            let phandle = parent.value_as_u32()? as usize;
+            let path = self
+                .phandle_map
+                .get(&phandle)
+                .ok_or(PropertyError::DanglingHandle)?;
+            let node = self.get_node(path).ok_or(PropertyError::DanglingHandle)?;
+            let data = intrs.value_as_proplist::<BigEndian32>()?;
+            let mut index = 0;
+            while index < data.len() {
+                let (value, step) = self.get_intr_value(node, &data[(index)..data.len()])?;
+                index += step;
+                res.push((phandle, value));
+            }
         }
         Ok(res)
     }

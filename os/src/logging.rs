@@ -21,9 +21,9 @@ impl Log for Logger {
         }
         let color_str = match record.level() {
             Level::Error => format_args!("{}{}", ansi_color!(WHITE), ansi_color!(backgr!(RED))), // Red
-            Level::Warn => ansi_color!(ITALIC, YELLOW),
-            Level::Info => ansi_color!(WHITE),           // White
-            Level::Debug => ansi_color!(GREEN),          // Green
+            Level::Warn => ansi_color!(ITALIC, YELLOW), // ItalicYellow
+            Level::Info => ansi_color!(WHITE),          // White
+            Level::Debug => ansi_color!(GREEN),         // Green
             Level::Trace => ansi_color!(bright!(BLACK)), // BrightBlack
         };
         kserial_println!(

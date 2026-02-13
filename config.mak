@@ -1,4 +1,4 @@
-export BUILD_TYPE		:= release
+export BUILD_TYPE		:= debug
 export DEFAULT_BUILD	:= riscv64-sbi
 
 export ALL_BUILDS		:= riscv64-sbi loongarch64-naked

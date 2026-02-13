@@ -4,13 +4,18 @@ use crate::{
     arch::symbols::{_ekernel, _skernel},
     debug_ex,
     dev::{
-        DEVICE_ROOT, DeviceHandle, DeviceRef, DeviceType, GENERAL_MEM, MemorySet, register_hart,
+        DEVICE_ROOT, Device, DeviceInfo, DeviceType, DriverStatus, GENERAL_MEM, IntcInfo, IntrInfo,
+        MemorySet,
+        handle::{Handle, HandleRef},
+        mmio::IoRange,
+        register_hart,
     },
     panic_init, phys_addr_from_symbol,
 };
 use alloc::{boxed::Box, vec};
 use dt::node::{DeviceTree, Node, NodeType};
 use log::warn;
+use spin::RwLock;
 
 pub fn register_all(dev_tree: DeviceTree) {
     register_mem(&dev_tree);
@@ -105,12 +110,12 @@ fn register_devices(dev_tree: &DeviceTree) {
     debug_ex!("Devices registered.");
 }
 
-fn register_devices_by_node(dev: DeviceRef, dev_tree: &DeviceTree, node: &Node) {
-    let handle: DeviceHandle = dev.get_handle().unwrap_or_else(|| { 
+fn register_devices_by_node(dev: HandleRef<Device>, dev_tree: &DeviceTree, node: &Node) {
+    let handle: Handle<Device> = dev.get_handle().unwrap_or_else(|| {
         panic_init!(
-            "Error registering devices under node '{}': Unable to fetch the handle of the parent device.",
+            "Error registering devices under node '{}': The parent device is not available.",
             node.full_name
-        );
+        )
     });
     for child in dev_tree.get_children(node) {
         if child.node_type == NodeType::Description {
@@ -127,7 +132,7 @@ fn register_devices_by_node(dev: DeviceRef, dev_tree: &DeviceTree, node: &Node) 
             match prop.value_as_strlist() {
                 Err(err) => {
                     warn!(
-                        "Error adding device '{}' to its parent device: Unable to get 'compatible' property: {:?}",
+                        "Error loading device '{}': Unable to get 'compatible' property: {:?}",
                         dev_tree.get_full_path(child),
                         err
                     );
@@ -141,15 +146,65 @@ fn register_devices_by_node(dev: DeviceRef, dev_tree: &DeviceTree, node: &Node) 
             }
         }
         // device type
-        let dev_type = if let Some(_) = dev_tree.get_property(child, "interrupt-controller") {
-            DeviceType::IntrController
-        } else if let Some(_) = comp_prop {
-            DeviceType::Device
-        } else {
-            DeviceType::Unspecified
+        let mut dev_type = DeviceType::UNSPECIFIED;
+        let mut intc_info = None;
+        if let Some(_) = dev_tree.get_property(child, "interrupt-controller") {
+            dev_type |= DeviceType::INTC;
+            if let Some(prop) = dev_tree.get_property(child, "phandle") {
+                match prop.value_as_u32() {
+                    Ok(value) => {
+                        intc_info = Some(IntcInfo {
+                            intc_id: value as usize,
+                        })
+                    }
+                    Err(err) => {
+                        warn!(
+                            "Error loading device '{}' as intr handle: Unable to parse 'phandle' property: {:?}",
+                            dev_tree.get_full_path(child),
+                            err
+                        );
+                    }
+                }
+            }
         };
+        if let Some(_) = comp_prop {
+            dev_type |= DeviceType::DEVICE;
+        }
+        // mmio info
+        let mut io_addr = vec![];
+        if let Ok(reg) = dev_tree.get_reg_value(child) {
+            for sec in reg {
+                io_addr.push(IoRange::from(sec));
+            }
+        }
+
+        // intr info
+        let mut intr_info = vec![];
+        match dev_tree.get_intr_info(child) {
+            Err(err) => {
+                warn!(
+                    "Error loading device '{}': Unable to get properties for interrupt info: {:?}",
+                    dev_tree.get_full_path(child),
+                    err
+                );
+                continue;
+            }
+            Ok(info) => {
+                for (intc, ir) in info {
+                    intr_info.push(IntrInfo { intc_id: intc, ir });
+                }
+            }
+        }
         // add device
-        let child_dev = handle.new_child(&child.full_name, comp_list, dev_type);
+        let child_dev = handle.new_child(DeviceInfo {
+            name: Box::from(child.full_name.as_ref()),
+            comp_list,
+            dev_type,
+            drv_stat: RwLock::new(DriverStatus::Unrecognized),
+            io_addr,
+            intr_info,
+            intc_info,
+        });
         match child_dev.add() {
             Err(err) => warn!(
                 "Error adding device '{}' to its parent device: {:?}",
@@ -160,7 +215,7 @@ fn register_devices_by_node(dev: DeviceRef, dev_tree: &DeviceTree, node: &Node) 
                 debug_ex!(
                     "\tRegistered device {} [{:?}].",
                     dev_tree.get_full_path(child),
-                    dev_ref.get_handle().unwrap().dev_type
+                    dev_ref.get_handle().unwrap().info.dev_type
                 );
                 register_devices_by_node(dev_ref, dev_tree, child);
             }

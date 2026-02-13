@@ -59,5 +59,6 @@ impl Property {
 #[derive(Debug)]
 pub enum PropertyError {
     InvalidPropFormat,
-    PropNotFound
+    PropNotFound,
+    DanglingHandle
 }

@@ -1,11 +1,10 @@
-use core::{mem::swap, ops::Range};
-
 use crate::{
     fdt::{FdtHeader, FdtNodeType, ReservedMemoryEntry},
     node::{DeviceTree, Node, NodeType},
-    prop::Property,
+    prop::{Property, PropertyError},
 };
-use alloc::{boxed::Box, slice, vec, vec::Vec};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, slice, vec, vec::Vec};
+use core::{mem::swap, ops::Range};
 use utils::{
     endian::{BigEndian32, EndianData},
     num::AlignableTo,
@@ -314,6 +313,22 @@ impl FdtReader {
         Ok(res)
     }
 
+    fn set_phandle(dev_tree: &mut DeviceTree, node_id: usize) -> Result<(), FdtError> {
+        let node = &dev_tree.container[node_id];
+        if let Some(prop) = dev_tree.get_property(node, "phandle") {
+            let handle = prop
+                .value_as_u32()
+                .map_err(|err| FdtError::Property { err })? as usize;
+            dev_tree
+                .phandle_map
+                .insert(handle, dev_tree.get_full_path(node));
+        }
+        for sub_id in node.children.clone() {
+            Self::set_phandle(dev_tree, sub_id)?;
+        }
+        Ok(())
+    }
+
     fn read_internal(&mut self) -> Result<DeviceTree, FdtError> {
         self.cursor = self.get_pointer32(self.get_header().off_dt_struct.value() as usize);
         let root_id = self.read_node()?;
@@ -326,6 +341,7 @@ impl FdtReader {
             root_id,
             container: vec![],
             mem_rsv_map: self.get_mem_rsv_map()?,
+            phandle_map: BTreeMap::new(),
         };
         swap(&mut self.nodes, &mut tree.container);
         if let Some(node) = tree.get_node_mut("/aliases") {
@@ -340,6 +356,7 @@ impl FdtReader {
         if let Some(node) = tree.get_node_mut("/chosen") {
             node.node_type = NodeType::Description;
         }
+        Self::set_phandle(&mut tree, root_id)?;
         Ok(tree)
     }
 
@@ -365,4 +382,5 @@ pub enum FdtError {
     InvalidNodeType { node_type: usize, cursor: usize },
     InvalidMagic { magic: usize },
     IncompatibleVersion { version: usize },
+    Property { err: PropertyError },
 }

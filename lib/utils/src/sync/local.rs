@@ -41,7 +41,7 @@ impl<T> LocalCell<T> {
 
 impl<T: Debug> Debug for LocalCell<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("UPSafeCell")
+        f.debug_struct("LocalCell")
             .field("inner", &self.inner)
             .finish()
     }

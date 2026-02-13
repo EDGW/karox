@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-use crate::dev::{mmio::Register, serial::Uart};
+use crate::dev::{mmio::reg::Register, serial::Uart};
 
 pub struct Uart16550 {
     mmio: &'static mut Uart16550Reg,

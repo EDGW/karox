@@ -4,19 +4,16 @@ use log::info;
 
 use crate::{
     arch::hart::get_current_hart_id,
-    debug_ex,
     sched::Scheduler,
     task::{get_current_task, scheduler::SCHEDULERS, task::Task},
 };
 
 pub fn add_test_tasks() {
-    debug_ex!("Adding test tasks...");
     /*unsafe {
         for _ in 0..3000 {
             add_to_current(test_fn as *const ());
         }
     }*/
-    debug_ex!("Test tasks added...");
 }
 
 pub unsafe fn add_to_current(entry: *const ()) {
