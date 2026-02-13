@@ -20,7 +20,7 @@ use crate::{
     dev::{
         Device, DeviceType,
         driver::{Driver, DriverProbeError, MmioError},
-        get_current_hart, get_hart, get_working_harts,
+        get_hart,
         handle::Handle,
         intc::{IntcDev, register_intc},
     },

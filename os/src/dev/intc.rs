@@ -18,7 +18,8 @@ pub trait IntcDev: Sync + Debug {
 
 #[derive(Debug)]
 pub struct Intc {
-    ctl: Box<dyn IntcDev + Send>,
+    intc_id: usize,
+    pub ctl: Box<dyn IntcDev + Send>,
     pub devs: RwLock<BTreeMap<usize, HandleRef<Device>>>,
 }
 
@@ -30,6 +31,7 @@ impl Intc {
             return None;
         }
         let intc = Intc {
+            intc_id,
             ctl,
             devs: RwLock::new(BTreeMap::new()),
         };
@@ -41,8 +43,7 @@ impl Intc {
 
 impl Drop for Intc {
     fn drop(&mut self) {
-        debug_ex!("Intc {:?} dropped", self);
-        todo!()
+        INTC_MAP.write().remove(&self.intc_id);
     }
 }
 
