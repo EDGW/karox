@@ -55,3 +55,7 @@ pub fn get_working_harts() -> Vec<&'static &'static HartInfo> {
 pub fn get_current_hart() -> &'static HartInfo {
     &HARTS[get_current_hart_id()]
 }
+
+pub fn get_hart(hart_id: usize) -> &'static HartInfo {
+    &HARTS[hart_id]
+}

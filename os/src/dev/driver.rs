@@ -14,13 +14,12 @@
 //! - **Drivers returned by [find_drivers] are `&'static` references originating from [DRIVER_REG].**
 use crate::{
     debug_ex,
-    dev::{Device, arch::register_drivers, handle::Handle},
+    dev::{Device, handle::Handle, serial},
 };
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, vec, vec::Vec};
 use core::fmt::Debug;
 use spin::RwLock;
 use utils::vec::LockedVecStatic;
-
 
 /// Trait implemented by drivers.
 ///
@@ -90,7 +89,11 @@ pub fn register_driver<T: 'static + Driver>(driver: Box<T>) {
 /// Initialize driver registry by calling platform-specific registrations.
 pub fn init() {
     debug_ex!("Registering drivers...");
-    register_drivers();
+    {
+        use crate::dev::arch::register_drivers;
+        register_drivers();
+    }
+    serial::register_drivers();
     debug_ex!("Drivers registered.");
 }
 
@@ -115,6 +118,8 @@ pub enum DriverProbeError {
 /// MMIO-related probe failures.
 #[derive(Debug, Clone, Copy)]
 pub enum MmioError {
+    /// MMIO space is not enough.
+    NotEnoughSpace,
     /// MMIO address is invalid or out of supported range.
     InvalidAddress,
     /// Device did not specify MMIO resources.
@@ -127,7 +132,7 @@ pub enum IntcError {
     /// Required interrupt-controller id not provided.
     IdNotGiven,
     /// Controller id already registered or duplicated.
-    DuplicatedId
+    DuplicatedId,
 }
 
 // endregion

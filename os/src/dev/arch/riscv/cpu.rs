@@ -20,7 +20,7 @@ use crate::{
     dev::{
         Device, DeviceType,
         driver::{Driver, DriverProbeError, MmioError},
-        get_current_hart,
+        get_current_hart, get_hart, get_working_harts,
         handle::Handle,
         intc::{IntcDev, register_intc},
     },
@@ -35,6 +35,7 @@ use log::warn;
 /// Both methods call `unreachable!()` because this adapter does not implement
 /// real interrupt handling; the actual controller implementation is expected
 /// to provide runtime claim/complete semantics after registration.
+#[derive(Debug)]
 pub struct CpuIntc;
 impl IntcDev for CpuIntc {
     fn claim(&self) -> usize {
@@ -111,7 +112,7 @@ impl Driver for CpuDriver {
                             panic_init!("Error registering cpu interrupt controller: {:?}", err)
                         });
                     // Store the handle to keep the controller alive.
-                    get_current_hart().intc.call_once(|| intc);
+                    get_hart(hart_id).intc.call_once(|| intc);
                     matched = true;
                 }
             }

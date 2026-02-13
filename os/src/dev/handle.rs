@@ -62,13 +62,19 @@ impl<T> Handle<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 /// Weak (non-owning) handle backed by [Weak<T>].
 ///
 /// A [HandleRef<T>] represents an optional reference to an object which may be destroyed
 /// independently of the referrers. Use [HandleRef<T>::get_handle] to attempt to obtain a strong [Handle<T>].
 pub struct HandleRef<T> {
     inner: Weak<T>,
+}
+
+impl<T> Clone for HandleRef<T>{
+    fn clone(&self) -> Self {
+        Self { inner: self.inner.clone() }
+    }
 }
 
 impl<T> HandleRef<T> {

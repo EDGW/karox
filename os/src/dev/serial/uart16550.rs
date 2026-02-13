@@ -1,13 +1,18 @@
+use crate::dev::{
+    Device,
+    driver::{Driver, DriverProbeError, MmioError},
+    handle::Handle,
+    mmio::{IoRangeValidationType, reg::Register},
+    serial::Uart,
+};
 use bitflags::bitflags;
 
-use crate::dev::{mmio::reg::Register, serial::Uart};
-
 pub struct Uart16550 {
-    mmio: &'static mut Uart16550Reg,
+    mmio: &'static mut Uart16550Registers,
 }
 
 #[repr(C, packed)]
-pub struct Uart16550Reg {
+pub struct Uart16550Registers {
     /// RBR(R) & THR(W) :0x00
     buffer: Register<u8>,
     /// IER(RW)         :0x01
@@ -27,7 +32,7 @@ pub struct Uart16550Reg {
 impl Uart16550 {
     pub fn create(base: usize) -> Uart16550 {
         Uart16550 {
-            mmio: unsafe { &mut *(base as *mut Uart16550Reg) },
+            mmio: unsafe { &mut *(base as *mut Uart16550Registers) },
         }
     }
 }
@@ -63,4 +68,30 @@ bitflags! {
         /// Whether at least one parity error, framing error or break indications have been received and are insidethe FIFO.
         const ERR           = 0b10000000;
     }
+}
+
+#[derive(Debug)]
+pub struct Uart16550Driver;
+impl Driver for Uart16550Driver {
+    fn get_name(&self) -> &'static str {
+        "Uart 16550"
+    }
+
+    fn get_comp_strs(&self) -> &'static [&'static str] {
+        &["ns16550a"]
+    }
+
+    fn probe(&self, dev: Handle<Device>) -> Result<(), DriverProbeError> {
+        let io_addr = &dev.info.io_addr;
+        if io_addr.is_empty() {
+            return Err(DriverProbeError::Mmio(MmioError::AddressNotSpecified));
+        }
+        let io_addr = &io_addr[0];
+        if !io_addr.validate::<Uart16550Registers>(IoRangeValidationType::Compatible) {
+            return Err(DriverProbeError::Mmio(MmioError::NotEnoughSpace));
+        }
+        Ok(())
+    }
+
+    fn on_registered(&self) {}
 }

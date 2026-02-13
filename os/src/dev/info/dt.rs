@@ -191,7 +191,7 @@ fn register_devices_by_node(dev: HandleRef<Device>, dev_tree: &DeviceTree, node:
             }
             Ok(info) => {
                 for (intc, ir) in info {
-                    intr_info.push(IntrInfo { intc_id: intc, ir });
+                    intr_info.push(IntrInfo { intc_id: intc, irq_id: ir });
                 }
             }
         }

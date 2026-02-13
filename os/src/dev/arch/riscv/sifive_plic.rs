@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use crate::{
     arch::hart::get_current_hart_id,
     dev::{
@@ -5,7 +7,7 @@ use crate::{
         driver::{Driver, DriverProbeError, IntcError, MmioError},
         handle::Handle,
         intc::{Intc, IntcDev, register_intc},
-        mmio::reg::Register,
+        mmio::{IoRangeValidationType, reg::Register},
     },
 };
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -29,8 +31,8 @@ struct PLICRegisters {
     /// Reserved[0x1f2000,0x200000)
     _rsv2: [Register<u32>; 0x3800],
 
-    /// Context Registers[0x200000,0x400000]
-    contexts: [ContextRegisters; 0x3e00],
+    /// Context Registers[0x200000,0x4000000], at least [0x200000, 0x600000]
+    contexts: [ContextRegisters; 1024],
 }
 
 #[repr(C)]
@@ -48,6 +50,12 @@ struct ContextRegisters {
 pub struct PLIntrController {
     registers: &'static PLICRegisters,
     locker: Mutex<()>,
+}
+
+impl Debug for PLIntrController {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PLIntrController").finish()
+    }
 }
 
 unsafe impl Sync for PLIntrController {}
@@ -108,8 +116,13 @@ impl Driver for PLICDriver {
     }
 
     fn probe(&self, dev: Handle<Device>) -> Result<(), DriverProbeError> {
-        if dev.info.io_addr.is_empty() {
+        let io_addr = &dev.info.io_addr;
+        if io_addr.is_empty() {
             return Err(DriverProbeError::Mmio(MmioError::AddressNotSpecified));
+        }
+        let io_addr = &io_addr[0];
+        if !io_addr.validate::<PLICRegisters>(IoRangeValidationType::Compatible) {
+            return Err(DriverProbeError::Mmio(MmioError::NotEnoughSpace));
         }
         let intc_id = dev
             .info
@@ -117,7 +130,7 @@ impl Driver for PLICDriver {
             .as_ref()
             .ok_or(DriverProbeError::Intc(IntcError::IdNotGiven))?
             .intc_id;
-        let io_addr = dev.info.io_addr[0].start;
+        let io_addr = io_addr.start;
         let dev = PLIntrController::new(io_addr).map_err(|err| DriverProbeError::Mmio(err))?;
         let handle =
             register_intc(intc_id, Box::new(dev)).map_err(|err| DriverProbeError::Intc(err))?;

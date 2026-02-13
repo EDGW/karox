@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use crate::{
     debug_ex,
     dev::{
@@ -6,18 +8,18 @@ use crate::{
         handle::{Handle, HandleRef},
     },
 };
-use alloc::{boxed::Box, collections::btree_map::BTreeMap, vec, vec::Vec};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap};
 use spin::RwLock;
 
-pub trait IntcDev: Sync {
+pub trait IntcDev: Sync + Debug {
     fn claim(&self) -> usize;
     fn complete(&self, ir: usize);
 }
 
+#[derive(Debug)]
 pub struct Intc {
-    intc_id: usize,
     ctl: Box<dyn IntcDev + Send>,
-    pub devs: RwLock<Vec<HandleRef<Device>>>,
+    pub devs: RwLock<BTreeMap<usize, HandleRef<Device>>>,
 }
 
 impl Intc {
@@ -28,9 +30,8 @@ impl Intc {
             return None;
         }
         let intc = Intc {
-            intc_id,
             ctl,
-            devs: RwLock::new(vec![]),
+            devs: RwLock::new(BTreeMap::new()),
         };
         let handle = Handle::from(intc);
         guard.insert(intc_id, handle.create_ref());
@@ -40,11 +41,16 @@ impl Intc {
 
 impl Drop for Intc {
     fn drop(&mut self) {
+        debug_ex!("Intc {:?} dropped", self);
         todo!()
     }
 }
 
 static INTC_MAP: RwLock<BTreeMap<usize, HandleRef<Intc>>> = RwLock::new(BTreeMap::new());
+
+pub fn get_intc(id: usize) -> Option<HandleRef<Intc>> {
+    INTC_MAP.read().get(&id).cloned()
+}
 
 pub fn register_intc(id: usize, ctl: Box<dyn IntcDev + Send>) -> Result<Handle<Intc>, IntcError> {
     let res = Intc::new(id, ctl).ok_or(IntcError::DuplicatedId);

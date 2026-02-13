@@ -20,6 +20,7 @@ use crate::{
     dev::{
         driver::{Driver, find_drivers},
         handle::{Handle, HandleRef},
+        intc::get_intc,
         mmio::IoRange,
     },
 };
@@ -110,7 +111,7 @@ pub struct IntrInfo {
     /// Interrupt controller instance id.
     pub intc_id: usize,
     /// Interrupt route/index within the controller.
-    pub ir: usize,
+    pub irq_id: usize,
 }
 
 /// [IntcInfo] describes an interrupt-controller implementation on a device.
@@ -291,11 +292,88 @@ pub fn init_devs_under_node(current: &Handle<Device>) -> Result<(), ()> {
     if failed { Err(()) } else { Ok(()) }
 }
 
+fn add_dev_to_intc_internal(dev: &Handle<Device>) -> Result<(), IntcBindingError> {
+    for intr_info in &dev.info.intr_info {
+        let intc = match get_intc(intr_info.intc_id) {
+            None => Err(IntcBindingError::IntcNotFound {
+                intc_id: intr_info.intc_id,
+            }),
+
+            Some(value) => match value.get_handle() {
+                None => Err(IntcBindingError::IntcNotFound {
+                    intc_id: intr_info.intc_id,
+                }),
+                Some(value) => Ok(value),
+            },
+        }?;
+        let mut guard = intc.devs.write();
+        if guard.contains_key(&intr_info.irq_id) {
+            return Err(IntcBindingError::IrqOccupied {
+                irq_id: intr_info.irq_id,
+            });
+        }
+        debug_ex!(
+            "\tAdded device {} to interrupt controller #{} irq {:#x}.",
+            dev.get_path(),
+            intr_info.intc_id,
+            intr_info.irq_id
+        );
+        guard.insert(intr_info.irq_id, dev.create_ref());
+    }
+    Ok(())
+}
+
+pub fn add_dev_to_intc(dev: &Handle<Device>) -> Result<(), IntcBindingError> {
+    match add_dev_to_intc_internal(dev) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            remove_dev_from_intc(dev);
+            Err(err)
+        }
+    }
+}
+
+pub fn remove_dev_from_intc(dev: &Handle<Device>) {
+    for intr_info in &dev.info.intr_info {
+        let intc = match get_intc(intr_info.intc_id) {
+            None => continue,
+
+            Some(value) => match value.get_handle() {
+                None => continue,
+                Some(value) => value,
+            },
+        };
+        let mut guard = intc.devs.write();
+        if guard.contains_key(&intr_info.irq_id) {
+            guard.remove(&intr_info.irq_id);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum IntcBindingError {
+    IntcNotFound { intc_id: usize },
+    IrqOccupied { irq_id: usize },
+}
+
+fn add_subdevs_to_intc(root: &Handle<Device>) {
+    let guard = root.children.read();
+    for sub in &*guard {
+        if sub.info.drv_stat.read().is_success() {
+            if let Err(err) = add_dev_to_intc_internal(sub) {
+                warn!("Error adding device to interrupt controller: {:?}", err);
+            }
+        }
+        add_subdevs_to_intc(sub);
+    }
+}
+
 /// Start device initialization from the global [DEVICE_ROOT].
 ///
 /// Print debug traces and ignore individual errors.
 pub fn init_devs() {
     debug_ex!("Initializing devices...");
     let _ = init_devs_by_node(&DEVICE_ROOT);
+    add_subdevs_to_intc(&DEVICE_ROOT);
     debug_ex!("Devices initialized.");
 }
